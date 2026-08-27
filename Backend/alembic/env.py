@@ -9,7 +9,12 @@ from models.education import Education
 from models.work_experience import WorkExperience
 from models.skill import Skill
 from models.candidate_skill import CandidateSkill
-
+from models.language import Language
+from models.candidate_language import CandidateLanguage
+from models.project import Project
+from models.job import Job
+from models.job_skill import JobSkill
+from models.match_result import MatchResult
 
 config = context.config
 
