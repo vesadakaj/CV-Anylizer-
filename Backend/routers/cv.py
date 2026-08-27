@@ -29,6 +29,15 @@ async def upload_cv(file: UploadFile = File(...)):
     except TextExtractionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if not extracted_text:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No text could be found in this file. It may be a scanned "
+                "or image-only document, which isn't supported yet."
+            ),
+        )
+
     return {
         "filename": file.filename,
         "content_type": file.content_type,
