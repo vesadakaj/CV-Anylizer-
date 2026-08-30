@@ -66,7 +66,13 @@ class CandidateExtractionError(Exception):
 
 
 def extract_candidate_info(cv_text: str) -> CandidateInfo:
-    client = anthropic.Anthropic(api_key=os.getenv("LLM_API_KEY"))
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key:
+        raise CandidateExtractionError(
+            "LLM_API_KEY is not configured. Set it in the backend .env file."
+        )
+
+    client = anthropic.Anthropic(api_key=api_key)
 
     try:
         response = client.messages.parse(
