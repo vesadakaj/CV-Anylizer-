@@ -1,7 +1,17 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
+from database import get_db
+from services.candidate_extraction import (
+    CandidateExtractionError,
+    extract_candidate_info,
+)
+from services.candidate_persistence import (
+    CandidatePersistenceError,
+    save_candidate,
+)
 from services.text_extraction import TextExtractionError, extract_text
 
 router = APIRouter()
@@ -11,7 +21,7 @@ MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 @router.post("/upload")
-async def upload_cv(file: UploadFile = File(...)):
+async def upload_cv(file: UploadFile = File(...), db: Session = Depends(get_db)):
     extension = Path(file.filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -38,9 +48,27 @@ async def upload_cv(file: UploadFile = File(...)):
             ),
         )
 
+    try:
+        candidate_info = extract_candidate_info(extracted_text)
+    except CandidateExtractionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    try:
+        candidate = save_candidate(
+            db,
+            candidate_info,
+            file_name=file.filename,
+            file_type=extension,
+            extracted_text=extracted_text,
+        )
+    except CandidatePersistenceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     return {
         "filename": file.filename,
         "content_type": file.content_type,
         "size_bytes": len(contents),
         "extracted_text": extracted_text,
+        "candidate_info": candidate_info,
+        "candidate_id": candidate.id,
     }
