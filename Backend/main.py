@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from routers.cv import router as cv_router
+from routers.job import router as job_router
 from database import get_db
 from models.candidate import Candidate
 
@@ -22,6 +23,12 @@ app.include_router(
     cv_router,
     prefix="/api/cv",
     tags=["cv"]
+)
+
+app.include_router(
+    job_router,
+    prefix="/api/jobs",
+    tags=["jobs"]
 )
 
 
