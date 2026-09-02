@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from routers.cv import router as cv_router
 from routers.job import router as job_router
+from routers.match import router as match_router
 from database import get_db
 from models.candidate import Candidate
 
@@ -29,6 +30,12 @@ app.include_router(
     job_router,
     prefix="/api/jobs",
     tags=["jobs"]
+)
+
+app.include_router(
+    match_router,
+    prefix="/api/match",
+    tags=["match"]
 )
 
 
