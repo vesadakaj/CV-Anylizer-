@@ -54,3 +54,133 @@
 .upload-message.error {
   color: #cf222e;
 }
+
+.candidate-ranking {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 320px;
+  width: 100%;
+  max-width: 720px;
+  box-sizing: border-box;
+}
+
+.candidate-ranking form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.candidate-ranking input {
+  font-size: 16px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  width: 120px;
+}
+
+.candidate-ranking button {
+  font-size: 16px;
+  padding: 8px 16px;
+  border-radius: 5px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.ranking-message {
+  font-size: 15px;
+}
+
+.ranking-message.error {
+  color: #cf222e;
+}
+
+.ranking-results {
+  width: 100%;
+  text-align: left;
+}
+
+.ranking-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ranking-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.ranking-item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+}
+
+.rank-badge {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.candidate-name {
+  flex-grow: 1;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.overall-score {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.overall-score.unscorable {
+  color: var(--text);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.component-scores {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.skill-lists p {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.explanation {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+  font-style: italic;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
