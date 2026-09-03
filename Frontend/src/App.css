@@ -783,3 +783,24 @@ button {
   cursor: not-allowed;
 }
 
+/* ---------- Matching Factors ---------- */
+
+.factor-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+
+.factor-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.factor-icon {
+  color: var(--pill-text);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
