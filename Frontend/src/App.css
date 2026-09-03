@@ -182,3 +182,11 @@
   color: var(--ink-faint);
 }
 
+/* ---------- Dashboard grid ---------- */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 20px;
+  padding: 0 32px 32px;
+}
