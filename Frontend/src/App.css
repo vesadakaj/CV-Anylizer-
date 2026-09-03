@@ -322,3 +322,16 @@
   color: var(--ink-faint);
 }
 
+.upload-message {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+}
+
+.upload-message.success {
+  color: #2f7a4f;
+}
+
+.upload-message.error {
+  color: #c34530;
+}
+
