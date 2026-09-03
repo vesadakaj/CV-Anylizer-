@@ -190,3 +190,16 @@
   gap: 20px;
   padding: 0 32px 32px;
 }
+
+.upload-card,
+.extracted-info-card,
+.job-description-card {
+  grid-column: span 7;
+}
+
+.recent-uploads-card,
+.matches-card,
+.matching-factors-card {
+  grid-column: span 5;
+}
+
