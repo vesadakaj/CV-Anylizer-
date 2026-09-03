@@ -111,3 +111,19 @@
 .sidebar-nav-item:disabled {
   opacity: 0.55;
 }
+
+.sidebar-logout {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--sidebar-text-dim);
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+}
+
