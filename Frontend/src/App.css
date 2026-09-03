@@ -724,3 +724,24 @@ button {
   font-size: 14px;
 }
 
+.rank-badge {
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.candidate-name {
+  flex-grow: 1;
+  font-weight: 600;
+}
+
+.overall-score {
+  font-weight: 700;
+  color: var(--tier-good);
+}
+
+.overall-score.unscorable {
+  color: var(--ink-faint);
+  font-weight: 400;
+  font-style: italic;
+}
+
