@@ -80,3 +80,55 @@ export function LogoutIcon(props) {
     </svg>
   )
 }
+
+export function UploadCloudIcon(props) {
+  return (
+    <svg {...base} viewBox="0 0 24 24" {...props}>
+      <path d="M7 18a4.5 4.5 0 0 1-.9-8.9 5.5 5.5 0 0 1 10.7-1.7A4 4 0 0 1 17.5 15" />
+      <path d="M12 20v-8M9 15l3-3 3 3" />
+    </svg>
+  )
+}
+
+export function CheckCircleIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="10" cy="10" r="7.5" />
+      <path d="M6.8 10.2l2.1 2.1 4.3-4.6" />
+    </svg>
+  )
+}
+
+export function PinIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M10 17.5S15.5 12.6 15.5 8.3A5.5 5.5 0 0 0 4.5 8.3C4.5 12.6 10 17.5 10 17.5Z" />
+      <circle cx="10" cy="8.3" r="2" />
+    </svg>
+  )
+}
+
+export function ChevronDownIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 7.5 10 12.5 15 7.5" />
+    </svg>
+  )
+}
+
+export function ChevronRightIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M7.5 5 12.5 10 7.5 15" />
+    </svg>
+  )
+}
+
+export function PdfFileIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5.5 2.5h6l3 3v12a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z" />
+      <path d="M11.5 2.5v3h3" />
+    </svg>
+  )
+}
