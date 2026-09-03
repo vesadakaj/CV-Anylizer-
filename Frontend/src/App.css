@@ -822,3 +822,14 @@ button {
   font-weight: 600;
   color: var(--pill-text);
 }
+@media (max-width: 1080px) {
+  .upload-card,
+  .extracted-info-card,
+  .job-description-card,
+  .recent-uploads-card,
+  .matches-card,
+  .matching-factors-card {
+    grid-column: span 12;
+  }
+}
+
