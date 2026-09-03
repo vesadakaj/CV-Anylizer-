@@ -548,3 +548,25 @@
   letter-spacing: 0.04em;
 }
 
+button {
+  font: inherit;
+}
+
+.job-form button,
+.dashboard-grid button[type='submit'] {
+  align-self: flex-start;
+  background: var(--sidebar-bg);
+  color: #fff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.job-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
