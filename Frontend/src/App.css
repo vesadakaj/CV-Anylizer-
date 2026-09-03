@@ -555,7 +555,8 @@ button {
 }
 
 .job-form button,
-.dashboard-grid button[type='submit'] {
+.dashboard-grid button[type='submit'],
+.use-selected-job-button {
   align-self: flex-start;
   background: var(--sidebar-bg);
   color: #fff;
@@ -567,9 +568,136 @@ button {
   cursor: pointer;
 }
 
-.job-form button:disabled {
+.job-form button:disabled,
+.use-selected-job-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ---------- Job Description Tabs ---------- */
+
+.job-tablist {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 2px;
+}
+
+.job-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  padding: 9px 14px;
+  border-radius: 9px 9px 0 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.job-tab.active {
+  color: var(--ink);
+  background: var(--chip-bg);
+  border-bottom-color: var(--gold);
+}
+
+.job-tab:focus-visible,
+.link-button:focus-visible,
+.use-selected-job-button:focus-visible,
+.existing-job-card:focus-within {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.job-tab-panel {
+  margin-top: 14px;
+}
+
+.existing-jobs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.existing-job-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  background: #fbf8f0;
+}
+
+.existing-job-card.selected {
+  border-color: var(--gold);
+  background: var(--chip-bg);
+}
+
+.existing-job-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.existing-job-card input[type='radio'] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--sidebar-bg);
+}
+
+.existing-job-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.existing-job-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.existing-job-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.existing-job-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.existing-job-warning {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #a5501f;
+}
+
+.pill-warning {
+  background: #fbe7d1;
+  color: #a5501f;
+}
+
+.use-selected-job-button {
+  margin-top: 14px;
 }
 
 /* ---------- Candidate Match Results ---------- */

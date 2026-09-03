@@ -124,6 +124,27 @@ export function ChevronRightIcon(props) {
   )
 }
 
+export function EditDocumentIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5.5 2.5h6l3 3v3.2" />
+      <path d="M11.5 2.5v3h3" />
+      <path d="M6.8 11H10M6.8 13.6h2" />
+      <path d="M14.9 10.8l2.3 2.3-5.4 5.4H9.5v-2.3l5.4-5.4Z" />
+    </svg>
+  )
+}
+
+export function BriefcaseIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2.5" y="6.5" width="15" height="10" rx="1.6" />
+      <path d="M7 6.5V5a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 13 5v1.5" />
+      <path d="M2.5 11.3h4v1.6h7v-1.6h4" />
+    </svg>
+  )
+}
+
 export function PdfFileIcon(props) {
   return (
     <svg {...base} {...props}>
