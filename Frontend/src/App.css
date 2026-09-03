@@ -285,3 +285,40 @@
 }
 
 /* ---------- Upload Resume ---------- */
+
+.dropzone {
+  margin-top: 14px;
+  border: 1.5px dashed var(--card-border);
+  border-radius: 12px;
+  padding: 38px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  text-align: center;
+  background: #fbf8f0;
+}
+
+.dropzone.dragging {
+  border-color: var(--tier-good);
+  background: #f3f0e6;
+}
+
+.dropzone-icon {
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+
+.dropzone-text {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink-dim);
+}
+
+.dropzone-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
