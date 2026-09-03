@@ -839,3 +839,9 @@ button {
   }
 }
 
+@media (max-width: 640px) {
+  .factor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
