@@ -203,3 +203,43 @@
   grid-column: span 5;
 }
 
+/* ---------- Card shell ---------- */
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.card-title {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.card-subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.empty-hint {
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  margin: 12px 0 0;
+}
+
