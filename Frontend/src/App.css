@@ -833,3 +833,9 @@ button {
   }
 }
 
+@media (max-width: 640px) {
+  .info-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
