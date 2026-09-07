@@ -1,19 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { fetchJobMatches } from '../lib/jobsApi'
 import { initials, scoreTierClass } from '../lib/scoreTier'
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 const TOP_COUNT = 5
 const PAGE_SIZE = 10
 
-function CandidateMatches({ jobId, jobTitle, onTopCandidateChange }) {
+function CandidateMatches({ jobId, jobTitle, onTopCandidateChange, initialExpanded = false }) {
   const [status, setStatus] = useState('idle') // idle | loading | error | success
   const [message, setMessage] = useState('')
   const [topMatches, setTopMatches] = useState([])
   const [totalCandidates, setTotalCandidates] = useState(0)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initialExpanded)
   const [fullRanking, setFullRanking] = useState(null)
   const [offset, setOffset] = useState(0)
   const [fullStatus, setFullStatus] = useState('idle')
+  const didAutoExpand = useRef(false)
 
   useEffect(() => {
     if (!jobId) {
@@ -27,10 +28,8 @@ function CandidateMatches({ jobId, jobTitle, onTopCandidateChange }) {
     setStatus('loading')
     setMessage('')
 
-    fetch(`${API_BASE}/api/jobs/${jobId}/matches?limit=${TOP_COUNT}&offset=0`)
-      .then(async (response) => {
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.detail || 'Could not load candidate matches.')
+    fetchJobMatches(jobId, { limit: TOP_COUNT, offset: 0 })
+      .then((data) => {
         setTopMatches(data.candidates)
         setTotalCandidates(data.total_candidates)
         onTopCandidateChange?.(data.candidates[0] || null)
@@ -48,10 +47,8 @@ function CandidateMatches({ jobId, jobTitle, onTopCandidateChange }) {
     if (!jobId) return
     setFullStatus('loading')
 
-    fetch(`${API_BASE}/api/jobs/${jobId}/matches?limit=${PAGE_SIZE}&offset=${requestedOffset}`)
-      .then(async (response) => {
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.detail || 'Could not load candidate matches.')
+    fetchJobMatches(jobId, { limit: PAGE_SIZE, offset: requestedOffset })
+      .then((data) => {
         setFullRanking(data)
         setOffset(requestedOffset)
         setFullStatus('success')
@@ -69,6 +66,13 @@ function CandidateMatches({ jobId, jobTitle, onTopCandidateChange }) {
       loadFullPage(0)
     }
   }
+
+  useEffect(() => {
+    if (!initialExpanded || !jobId || didAutoExpand.current) return
+    didAutoExpand.current = true
+    loadFullPage(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialExpanded, jobId])
 
   return (
     <section className="card matches-card">

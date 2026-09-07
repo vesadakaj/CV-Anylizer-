@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
-import { BriefcaseIcon, EditDocumentIcon } from '../icons'
-
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+import { useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { BriefcaseIcon, EditDocumentIcon, SearchIcon } from '../icons'
+import { analyzeJob, fetchJobs } from '../lib/jobsApi'
+import { formatDate } from '../lib/jobFormat'
 
 const TABS = [
   { id: 'enter', label: 'Enter job details', Icon: EditDocumentIcon },
@@ -9,6 +10,7 @@ const TABS = [
 ]
 
 function JobDescription({ jobInfo, onAnalyzed }) {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('enter')
   const tabRefs = useRef({})
 
@@ -22,14 +24,22 @@ function JobDescription({ jobInfo, onAnalyzed }) {
   const [jobsError, setJobsError] = useState('')
   const [jobs, setJobs] = useState([])
   const [selectedJobId, setSelectedJobId] = useState(null)
+  const [jobSearch, setJobSearch] = useState('')
 
-  const fetchJobs = () => {
+  const visibleJobs = useMemo(() => {
+    const term = jobSearch.trim().toLowerCase()
+    if (!term) return jobs
+    return jobs.filter((job) => {
+      const haystack = [job.title, job.company_name].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(term)
+    })
+  }, [jobs, jobSearch])
+
+  const loadJobs = () => {
     setJobsStatus('loading')
     setJobsError('')
-    fetch(`${API_BASE}/api/jobs`)
-      .then(async (response) => {
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.detail || 'Could not load existing jobs.')
+    fetchJobs()
+      .then((data) => {
         setJobs(data.jobs)
         setJobsStatus('success')
       })
@@ -42,7 +52,7 @@ function JobDescription({ jobInfo, onAnalyzed }) {
   const activateTab = (id) => {
     setActiveTab(id)
     if (id === 'select' && jobsStatus === 'idle') {
-      fetchJobs()
+      loadJobs()
     }
   }
 
@@ -55,17 +65,7 @@ function JobDescription({ jobInfo, onAnalyzed }) {
     setMessage('')
 
     try {
-      const response = await fetch(`${API_BASE}/api/jobs/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Could not analyze job description.')
-      }
-
+      const data = await analyzeJob(description)
       setStatus('idle')
       onAnalyzed?.(data.job_id, data.job_info)
     } catch (err) {
@@ -78,13 +78,9 @@ function JobDescription({ jobInfo, onAnalyzed }) {
     const job = jobs.find((j) => j.job_id === selectedJobId)
     if (!job || !job.ready_to_match) return
 
-    onAnalyzed?.(job.job_id, {
-      title: job.title,
-      company_name: job.company_name,
-      required_experience_years: job.required_experience_years,
-      required_education: job.required_education,
-      skills: job.skills,
-    })
+    // No NLP re-analysis and no new Job record here - just hand off to the
+    // standalone simplified matches page using the job's real job_id.
+    navigate(`/jobs/${job.job_id}/matches`)
   }
 
   const handleTabKeyDown = (e) => {
@@ -196,7 +192,7 @@ function JobDescription({ jobInfo, onAnalyzed }) {
             {jobsStatus === 'error' && (
               <div>
                 <p className="upload-message error">{jobsError}</p>
-                <button type="button" className="link-button" onClick={fetchJobs}>
+                <button type="button" className="link-button" onClick={loadJobs}>
                   Retry
                 </button>
               </div>
@@ -208,8 +204,26 @@ function JobDescription({ jobInfo, onAnalyzed }) {
 
             {jobsStatus === 'success' && jobs.length > 0 && (
               <>
+                <div className="search-field existing-jobs-search">
+                  <SearchIcon width={16} height={16} aria-hidden="true" className="search-field-icon" />
+                  <label htmlFor="existing-job-search" className="visually-hidden">
+                    Search existing jobs by title or company
+                  </label>
+                  <input
+                    id="existing-job-search"
+                    type="search"
+                    placeholder="Search by title or company…"
+                    value={jobSearch}
+                    onChange={(e) => setJobSearch(e.target.value)}
+                  />
+                </div>
+
+                {visibleJobs.length === 0 && (
+                  <p className="empty-hint">No jobs match your search.</p>
+                )}
+
                 <ul className="existing-jobs-list">
-                  {jobs.map((job) => (
+                  {visibleJobs.map((job) => (
                     <li key={job.job_id}>
                       <label
                         className={`existing-job-card${
@@ -243,6 +257,7 @@ function JobDescription({ jobInfo, onAnalyzed }) {
                               {job.required_skills_count} required skill
                               {job.required_skills_count === 1 ? '' : 's'}
                             </span>
+                            {job.posting_date && <span>Posted {formatDate(job.posting_date)}</span>}
                           </div>
                           {!job.ready_to_match && (
                             <p className="existing-job-warning">

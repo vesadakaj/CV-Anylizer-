@@ -145,6 +145,31 @@ export function BriefcaseIcon(props) {
   )
 }
 
+export function PlusIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M10 4v12M4 10h12" />
+    </svg>
+  )
+}
+
+export function FilterIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M3 4.5h14M6 10h8M8.5 15.5h3" />
+    </svg>
+  )
+}
+
+export function SearchIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="8.7" cy="8.7" r="5.2" />
+      <path d="M16.5 16.5 12.7 12.7" />
+    </svg>
+  )
+}
+
 export function PdfFileIcon(props) {
   return (
     <svg {...base} {...props}>

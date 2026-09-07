@@ -1,3 +1,4 @@
+import { NavLink } from 'react-router-dom'
 import {
   AnalyticsIcon,
   CandidatesIcon,
@@ -9,12 +10,12 @@ import {
 } from '../icons'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', icon: DashboardIcon, active: true },
-  { label: 'Resumes', icon: ResumesIcon, active: false },
-  { label: 'Jobs', icon: JobsIcon, active: false },
-  { label: 'Candidates', icon: CandidatesIcon, active: false },
-  { label: 'Analytics', icon: AnalyticsIcon, active: false },
-  { label: 'Settings', icon: SettingsIcon, active: false },
+  { label: 'Dashboard', icon: DashboardIcon, to: '/' },
+  { label: 'Resumes', icon: ResumesIcon, to: null },
+  { label: 'Jobs', icon: JobsIcon, to: '/jobs' },
+  { label: 'Candidates', icon: CandidatesIcon, to: null },
+  { label: 'Analytics', icon: AnalyticsIcon, to: null },
+  { label: 'Settings', icon: SettingsIcon, to: null },
 ]
 
 function Sidebar() {
@@ -31,19 +32,31 @@ function Sidebar() {
         </span>
       </div>
 
-      <nav className="sidebar-nav">
-        {NAV_ITEMS.map(({ label, icon: Icon, active }) => (
-          <button
-            key={label}
-            type="button"
-            className={`sidebar-nav-item${active ? ' active' : ''}`}
-            disabled={!active}
-            title={active ? undefined : `${label} — coming soon`}
-          >
-            <Icon />
-            <span>{label}</span>
-          </button>
-        ))}
+      <nav className="sidebar-nav" aria-label="Main">
+        {NAV_ITEMS.map(({ label, icon: Icon, to }) =>
+          to ? (
+            <NavLink
+              key={label}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
+            >
+              <Icon />
+              <span>{label}</span>
+            </NavLink>
+          ) : (
+            <button
+              key={label}
+              type="button"
+              className="sidebar-nav-item"
+              disabled
+              title={`${label} — coming soon`}
+            >
+              <Icon />
+              <span>{label}</span>
+            </button>
+          ),
+        )}
       </nav>
 
       <button type="button" className="sidebar-logout" disabled title="Logout — not wired up yet">

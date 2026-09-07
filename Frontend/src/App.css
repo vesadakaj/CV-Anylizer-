@@ -99,17 +99,23 @@
   font: inherit;
   font-size: 14.5px;
   text-align: left;
-  cursor: default;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .sidebar-nav-item.active {
   background: var(--sidebar-item-active-bg);
   color: #fff;
-  cursor: pointer;
 }
 
 .sidebar-nav-item:disabled {
   opacity: 0.55;
+  cursor: default;
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 .sidebar-logout {
@@ -550,6 +556,20 @@
   letter-spacing: 0.04em;
 }
 
+.job-detail-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job-detail-meta-grid-narrow {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 button {
   font: inherit;
 }
@@ -617,6 +637,14 @@ button {
 
 .job-tab-panel {
   margin-top: 14px;
+}
+
+.existing-jobs-search {
+  margin-bottom: 12px;
+}
+
+.existing-jobs-search input {
+  width: 100%;
 }
 
 .existing-jobs-list {
@@ -952,6 +980,758 @@ button {
   font-weight: 600;
   color: var(--pill-text);
 }
+
+/* ---------- Utilities ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Page shell (Jobs, Job detail, Create job) ---------- */
+
+.page-container {
+  padding: 28px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.back-link {
+  align-self: flex-start;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.page-subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.page-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+}
+
+.page-banner.success {
+  background: var(--pill-bg);
+  color: var(--pill-text);
+}
+
+.page-banner-dismiss {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+/* ---------- Search field ---------- */
+
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-field-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.search-field input {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 9px 12px 9px 34px;
+  border-radius: 9px;
+  border: 1px solid var(--card-border);
+  background: #fbf8f0;
+  width: 220px;
+  color: var(--ink);
+}
+
+.search-field input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+/* ---------- Filter button/panel ---------- */
+
+.filter-anchor {
+  position: relative;
+}
+
+.filter-button,
+.create-job-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.filter-button {
+  border: 1px solid var(--card-border);
+  background: #fff;
+  color: var(--ink);
+}
+
+.create-job-button {
+  border: none;
+  background: var(--sidebar-bg);
+  color: #fff;
+}
+
+.filter-button:focus-visible,
+.create-job-button:focus-visible,
+.table-action-button:focus-visible,
+.back-link:focus-visible,
+.page-banner-dismiss:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.filter-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 5;
+  width: 280px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-group-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-radio {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.filter-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-range-row input {
+  width: 0;
+  flex: 1;
+}
+
+.filter-group input,
+.filter-group select {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: #fbf8f0;
+  color: var(--ink);
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--card-border);
+}
+
+/* ---------- Jobs table ---------- */
+
+.jobs-table-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.jobs-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.jobs-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--ink-dim);
+  vertical-align: middle;
+}
+
+.jobs-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.jobs-table tbody tr:hover {
+  background: #fbf8f0;
+}
+
+.jobs-table-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.jobs-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-action-button {
+  border: 1px solid var(--card-border);
+  background: #fff;
+  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.table-action-button:hover {
+  background: var(--chip-bg);
+}
+
+.table-empty-state {
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.table-note {
+  margin: 0;
+  padding: 10px 16px 16px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.jobs-table-card .pagination {
+  padding: 4px 16px 18px;
+  margin-top: 0;
+}
+
+/* ---------- Loading skeleton ---------- */
+
+.skeleton-bar {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--chip-bg);
+  animation: skeleton-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- Job detail page ---------- */
+
+.job-detail-card .page-header {
+  margin-bottom: 6px;
+}
+
+.job-detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin: 10px 0 4px;
+  padding: 14px 0;
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.job-description-text {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Job Details' own dedicated "Original Description" section - the page
+   itself already scrolls, so this reads as plain flowing text instead of a
+   second, nested scroll region. */
+.job-description-text-full {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+  white-space: pre-wrap;
+}
+
+.job-detail-card .use-selected-job-button {
+  margin-top: 16px;
+}
+
+/* ---------- Create job page ---------- */
+
+.create-job-form {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--card-border);
+  background: #fbf8f0;
+  color: var(--ink);
+}
+
+.form-field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.form-field input:focus-visible,
+.form-field select:focus-visible,
+.form-field textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.form-field input[aria-invalid='true'] {
+  border-color: #c34530;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 12px;
+  color: #c34530;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.editable-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editable-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editable-list-item input {
+  flex-grow: 1;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--card-border);
+  background: #fbf8f0;
+  color: var(--ink);
+}
+
+.editable-list-item input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.skill-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.skill-input-row input {
+  flex-grow: 1;
+}
+
+.removable-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-remove {
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.chip-remove:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.form-actions .table-action-button {
+  padding: 9px 18px;
+  border-radius: 9px;
+  font-size: 13.5px;
+}
+
+.form-actions .use-selected-job-button {
+  align-self: center;
+}
+
+/* ---------- Simplified "View matches" page ---------- */
+
+/* Root cause of the old narrow layout: this card used to cap out at
+   max-width:640px inside an otherwise-unconstrained .page-container, leaving
+   a large empty area on wide viewports. The page now gets its own centered,
+   wide container (scoped to this page only - .page-container itself is left
+   untouched since Jobs/Job Detail/Create Job intentionally use full width). */
+.matches-page-container {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.simple-matches-card {
+  width: 100%;
+  /* Last-resort safety net: never let an extreme-narrow-viewport row push
+     this card wider than its container and cause page-level horizontal
+     scroll (the row layout itself is sized to avoid this in the first
+     place). */
+  overflow-x: hidden;
+}
+
+.matches-count {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+
+.simple-match-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.simple-match-item {
+  display: grid;
+  grid-template-columns: 30px 36px minmax(140px, 240px) 1fr auto;
+  grid-template-areas: 'rank avatar name bar score';
+  align-items: center;
+  column-gap: 16px;
+  padding: 14px 10px;
+  border-radius: 10px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.simple-match-item:last-child {
+  border-bottom: none;
+}
+
+.simple-match-item:hover,
+.simple-match-item:focus-within {
+  background: var(--chip-bg);
+}
+
+.simple-match-rank {
+  grid-area: rank;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.simple-match-rank.first {
+  background: var(--gold);
+  color: #fff;
+}
+
+.simple-match-rank.top {
+  background: #ecdcb2;
+  color: var(--ink);
+}
+
+.simple-match-avatar {
+  grid-area: avatar;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--sidebar-bg);
+  color: #f4efe4;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.simple-match-name {
+  grid-area: name;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-match-bar {
+  grid-area: bar;
+  width: 100%;
+  height: 8px;
+}
+
+.simple-match-score {
+  grid-area: score;
+  flex-shrink: 0;
+  width: 92px;
+  text-align: right;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--tier-good);
+}
+
+.simple-match-score.tier-mid {
+  color: var(--tier-mid);
+}
+
+.simple-match-score.tier-low {
+  color: var(--tier-low);
+}
+
+.simple-match-score.tier-unknown {
+  color: var(--ink-faint);
+}
+
+/* Row skeletons - same grid shape as real rows so the loading state doesn't
+   jump when data arrives. */
+.skeleton-simple-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 18px;
+}
+
+.simple-match-item.skeleton-row {
+  border-bottom: 1px solid var(--card-border);
+}
+
+.skeleton-rank {
+  grid-area: rank;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.skeleton-avatar {
+  grid-area: avatar;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.skeleton-name {
+  grid-area: name;
+}
+
+.skeleton-progress {
+  grid-area: bar;
+  height: 8px;
+}
+
+.skeleton-score {
+  grid-area: score;
+  width: 60px;
+  justify-self: end;
+}
+
+.matches-page-error {
+  margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+  .simple-match-item {
+    grid-template-columns: 26px 32px minmax(90px, 160px) 1fr auto;
+    column-gap: 10px;
+  }
+
+  .simple-match-score {
+    width: auto;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .simple-match-item {
+    grid-template-columns: 24px 28px minmax(64px, 1fr) auto;
+    grid-template-areas:
+      'rank avatar name score'
+      'bar bar bar bar';
+    column-gap: 8px;
+    row-gap: 8px;
+    padding: 12px 8px;
+  }
+
+  .simple-match-rank {
+    width: 24px;
+    height: 24px;
+  }
+
+  .simple-match-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .simple-match-bar {
+    margin-top: 2px;
+  }
+
+  .simple-match-score {
+    width: auto;
+    font-size: 13px;
+  }
+}
+
 @media (max-width: 1080px) {
   .upload-card,
   .extracted-info-card,
@@ -971,6 +1751,34 @@ button {
 
 @media (max-width: 640px) {
   .factor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-header-controls {
+    width: 100%;
+  }
+
+  .search-field {
+    flex-grow: 1;
+  }
+
+  .search-field input {
+    width: 100%;
+  }
+
+  .filter-panel {
+    right: auto;
+    left: 0;
+    width: min(280px, 90vw);
+  }
+
+  .job-detail-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
     grid-template-columns: 1fr;
   }
 }

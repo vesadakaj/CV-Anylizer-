@@ -148,6 +148,47 @@ def test_full_scoring_scenario(db_session):
     assert outcome.available_criteria == ["skills", "experience", "education"]
 
 
+def test_preferred_qualifications_and_description_do_not_affect_score(db_session):
+    """Responsibilities, required/preferred qualifications, and the raw
+    description are informational-only text fields the matching layer never
+    reads (see services/matching.py module docstring) - two otherwise
+    identical jobs must score identically regardless of what they contain."""
+    candidate = make_candidate(db_session, "Jane Doe")
+    add_candidate_skill(db_session, candidate, "Python")
+    add_experience(db_session, candidate, date(2022, 1, 1), None, is_current=True)
+    add_education(db_session, candidate, "BSc", "Computer Science")
+
+    plain_job = make_job(
+        db_session,
+        "Backend Developer",
+        required_experience_years=3.0,
+        required_education="Bachelor's degree",
+    )
+    add_job_skill(db_session, plain_job, "Python", required=True)
+
+    decorated_job = make_job(
+        db_session,
+        "Backend Developer",
+        required_experience_years=3.0,
+        required_education="Bachelor's degree",
+        responsibilities='["Ship features", "Review code"]',
+        required_qualifications='["Excellent communication skills"]',
+        preferred_qualifications='["10 years of Python", "PhD preferred"]',
+    )
+    add_job_skill(db_session, decorated_job, "Python", required=True)
+    db_session.commit()
+
+    plain_outcome = get_candidate_job_match(
+        db_session, candidate.id, plain_job.id, today=TODAY, persist=False
+    )
+    decorated_outcome = get_candidate_job_match(
+        db_session, candidate.id, decorated_job.id, today=TODAY, persist=False
+    )
+
+    assert plain_outcome.overall_score == decorated_outcome.overall_score
+    assert plain_outcome.available_criteria == decorated_outcome.available_criteria
+
+
 # --------------------------------------------------------------------------
 # Unscorable job
 # --------------------------------------------------------------------------
