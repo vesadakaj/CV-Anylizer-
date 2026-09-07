@@ -313,6 +313,11 @@
   background: #f3f0e6;
 }
 
+.dropzone.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .dropzone-icon {
   color: var(--ink-faint);
   margin-bottom: 4px;
@@ -355,16 +360,53 @@
 }
 
 .recent-upload-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   padding: 9px 4px;
   border-bottom: 1px solid var(--card-border);
+  border-radius: 8px;
   font-size: 13.5px;
 }
 
 .recent-upload-item:last-child {
   border-bottom: none;
+}
+
+.recent-upload-item.selected {
+  background: var(--chip-bg);
+}
+
+.recent-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recent-upload-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-grow: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recent-upload-main:disabled {
+  cursor: default;
+}
+
+.recent-upload-main:not(:disabled):hover .recent-upload-name {
+  text-decoration: underline;
+}
+
+.recent-upload-main:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .recent-upload-icon {
@@ -381,9 +423,20 @@
   color: var(--ink);
 }
 
+.recent-upload-size,
 .recent-upload-time {
   color: var(--ink-faint);
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.recent-upload-error {
+  margin: 4px 0 0 30px;
+  font-size: 12px;
+  color: #c34530;
+}
+
+.recent-upload-row .pill {
   flex-shrink: 0;
 }
 
@@ -724,6 +777,11 @@ button {
   color: #a5501f;
 }
 
+.pill-neutral {
+  background: var(--chip-bg);
+  color: var(--ink-dim);
+}
+
 .use-selected-job-button {
   margin-top: 14px;
 }
@@ -837,6 +895,38 @@ button {
 .match-score span {
   font-size: 11px;
   color: var(--ink-faint);
+}
+
+/* ---------- Single-candidate match result (Dashboard) ---------- */
+
+.single-match-result {
+  margin-top: 4px;
+}
+
+.single-match-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.single-match-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.single-match-job {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.single-match-score {
+  margin: 8px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .view-full-button {

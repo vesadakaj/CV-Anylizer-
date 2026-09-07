@@ -1,65 +1,44 @@
 import { useRef, useState } from 'react'
 import { UploadCloudIcon } from '../icons'
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx']
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
-
-function getExtension(name) {
-  return name.slice(name.lastIndexOf('.')).toLowerCase()
-}
-
-function UploadResume({ onUploaded }) {
-  const [status, setStatus] = useState('idle') // idle | uploading | success | error
-  const [message, setMessage] = useState('')
+function UploadResume({ isProcessing, onFilesSelected }) {
+  const [rejectedMessage, setRejectedMessage] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef(null)
 
-  const uploadFile = async (file) => {
-    if (!file) return
-
-    const extension = getExtension(file.name)
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      setStatus('error')
-      setMessage('Only PDF and DOCX files are supported.')
-      return
-    }
-
-    setStatus('uploading')
-    setMessage('')
-
-    const formData = new FormData()
-    formData.append('file', file)
-
-    try {
-      const response = await fetch(`${API_BASE}/api/cv/upload`, {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Upload failed.')
-      }
-
-      setStatus('success')
-      setMessage(`Uploaded "${data.filename}" — analysis complete.`)
-      onUploaded?.(data)
-    } catch (err) {
-      setStatus('error')
-      setMessage(err.message)
-    }
+  const handleFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return
+    const { rejectedNames } = onFilesSelected(fileList)
+    setRejectedMessage(
+      rejectedNames.length > 0
+        ? `${rejectedNames.length === 1 ? 'File' : 'Files'} skipped (only PDF and DOCX are supported): ${rejectedNames.join(', ')}`
+        : '',
+    )
   }
 
   const handleInputChange = (e) => {
-    const selected = e.target.files[0]
-    uploadFile(selected)
+    handleFiles(e.target.files)
     e.target.value = ''
   }
 
   const handleDrop = (e) => {
     e.preventDefault()
     setIsDragging(false)
-    uploadFile(e.dataTransfer.files[0])
+    if (isProcessing) return
+    handleFiles(e.dataTransfer.files)
+  }
+
+  const handleClick = () => {
+    if (isProcessing) return
+    inputRef.current?.click()
+  }
+
+  const handleKeyDown = (e) => {
+    if (isProcessing) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      inputRef.current?.click()
+    }
   }
 
   return (
@@ -68,40 +47,48 @@ function UploadResume({ onUploaded }) {
       <p className="card-subtitle">Upload a PDF or DOCX file to analyze</p>
 
       <div
-        className={`dropzone${isDragging ? ' dragging' : ''}`}
-        onClick={() => inputRef.current?.click()}
+        className={`dropzone${isDragging ? ' dragging' : ''}${isProcessing ? ' disabled' : ''}`}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onDragOver={(e) => {
           e.preventDefault()
-          setIsDragging(true)
+          if (!isProcessing) setIsDragging(true)
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         role="button"
-        tabIndex={0}
+        tabIndex={isProcessing ? -1 : 0}
+        aria-disabled={isProcessing}
       >
         <UploadCloudIcon className="dropzone-icon" />
         <p className="dropzone-text">
-          {status === 'uploading' ? (
-            'Uploading…'
+          {isProcessing ? (
+            'Please wait until the current CV finishes processing.'
           ) : (
             <>
-              Drag and drop your file here,
+              Drag and drop your files here,
               <br />
               or click to browse
             </>
           )}
         </p>
-        <p className="dropzone-hint">PDF, DOCX up to 5MB</p>
+        <p className="dropzone-hint">PDF, DOCX up to 5MB — you can select multiple files</p>
         <input
           ref={inputRef}
           type="file"
           accept=".pdf,.docx"
+          multiple
+          disabled={isProcessing}
           onChange={handleInputChange}
           hidden
         />
       </div>
 
-      {message && <p className={`upload-message ${status}`}>{message}</p>}
+      {rejectedMessage && (
+        <p className="upload-message error" role="alert">
+          {rejectedMessage}
+        </p>
+      )}
     </section>
   )
 }

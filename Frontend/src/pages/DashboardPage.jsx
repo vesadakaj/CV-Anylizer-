@@ -1,44 +1,60 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import UploadResume from '../components/UploadResume'
 import RecentUploads from '../components/RecentUploads'
 import ExtractedInfo from '../components/ExtractedInfo'
 import JobDescription from '../components/JobDescription'
 import CandidateMatches from '../components/CandidateMatches'
 import MatchingFactors from '../components/MatchingFactors'
+import { useCvUploadQueue } from '../lib/useCvUploadQueue'
 
 function DashboardPage() {
-  const [lastCandidate, setLastCandidate] = useState(null)
-  const [recentUploads, setRecentUploads] = useState([])
+  const [selectedCandidateId, setSelectedCandidateId] = useState(null)
   const [job, setJob] = useState({ id: null, info: null })
-  const [topCandidate, setTopCandidate] = useState(null)
+  const [matchResult, setMatchResult] = useState(null)
 
-  const handleUploaded = (data) => {
-    setLastCandidate(data.candidate_info)
-    setRecentUploads((prev) => [
-      { id: data.candidate_id, filename: data.filename, uploadedAt: Date.now() },
-      ...prev,
-    ].slice(0, 5))
+  // A newly-Ready CV is only auto-selected when nothing has been selected
+  // yet - once any selection exists (auto or manual), later completions
+  // never override it.
+  const handleReady = useCallback((_localId, data) => {
+    setSelectedCandidateId((prev) => (prev == null ? data.candidate_id : prev))
+  }, [])
+
+  const { items, isProcessing, addFiles, retry } = useCvUploadQueue({ onReady: handleReady })
+
+  const selectedItem = items.find((item) => item.candidateId === selectedCandidateId) || null
+  const selectedCandidate = selectedItem?.candidateInfo || null
+
+  const handleSelect = (item) => {
+    if (item.status !== 'ready') return
+    setSelectedCandidateId(item.candidateId)
   }
 
   const handleJobAnalyzed = (jobId, jobInfo) => {
     setJob({ id: jobId, info: jobInfo })
-    if (!jobId) setTopCandidate(null)
   }
 
   return (
     <main className="dashboard-grid">
-      <UploadResume onUploaded={handleUploaded} />
-      <RecentUploads uploads={recentUploads} />
+      <UploadResume isProcessing={isProcessing} onFilesSelected={addFiles} />
+      <RecentUploads
+        items={items}
+        selectedCandidateId={selectedCandidateId}
+        isProcessing={isProcessing}
+        onSelect={handleSelect}
+        onRetry={retry}
+      />
 
-      <ExtractedInfo candidate={lastCandidate} />
+      <ExtractedInfo candidate={selectedCandidate} />
       <CandidateMatches
+        candidateId={selectedCandidateId}
+        candidateName={selectedCandidate?.full_name}
         jobId={job.id}
         jobTitle={job.info?.title}
-        onTopCandidateChange={setTopCandidate}
+        onMatchResultChange={setMatchResult}
       />
 
       <JobDescription jobInfo={job.info} onAnalyzed={handleJobAnalyzed} />
-      <MatchingFactors candidate={topCandidate} />
+      <MatchingFactors candidate={matchResult} />
     </main>
   )
 }

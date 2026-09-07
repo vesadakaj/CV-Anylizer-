@@ -42,6 +42,17 @@ export async function fetchJobMatches(jobId, { limit = 20, offset = 0 } = {}) {
   return parseJsonResponse(response)
 }
 
+// Scores exactly one candidate against exactly one job - the deterministic
+// individual-match endpoint, as opposed to fetchJobMatches() which ranks
+// every candidate. Used by the Dashboard's single-selected-candidate match
+// card so selecting a CV never triggers a full re-ranking.
+export async function matchCandidateToJob(candidateId, jobId) {
+  const response = await fetch(`${API_BASE}/api/match/${candidateId}/${jobId}`, {
+    method: 'POST',
+  })
+  return parseJsonResponse(response)
+}
+
 // Manual, structured job creation - no NLP/LLM extraction involved.
 export async function createJob(payload) {
   const response = await fetch(`${API_BASE}/api/jobs`, {

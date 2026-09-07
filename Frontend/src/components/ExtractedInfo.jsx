@@ -13,7 +13,9 @@ function ExtractedInfo({ candidate }) {
         <div className="card-header-row">
           <h2 className="card-title">Extracted Information</h2>
         </div>
-        <p className="empty-hint">Upload a resume to see the candidate profile the AI extracted.</p>
+        <p className="empty-hint">
+          Select a completed CV from Recent Uploads to view its extracted information.
+        </p>
       </section>
     )
   }
