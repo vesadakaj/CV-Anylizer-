@@ -53,6 +53,14 @@
   flex-direction: column;
   padding: 22px 16px;
   gap: 28px;
+  /* Without an explicit height the flex row's default align-items:stretch
+     would make the sidebar as tall as the (often much taller) main content,
+     which defeats position:sticky. Capping it at the viewport height keeps
+     it pinned in place while the page scrolls. */
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow-y: auto;
 }
 
 .sidebar-brand {

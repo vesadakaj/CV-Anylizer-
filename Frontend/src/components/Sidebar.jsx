@@ -1,21 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import {
-  AnalyticsIcon,
-  CandidatesIcon,
-  DashboardIcon,
-  JobsIcon,
-  LogoutIcon,
-  ResumesIcon,
-  SettingsIcon,
-} from '../icons'
+import { CandidatesIcon, DashboardIcon, JobsIcon, LogoutIcon, ResumesIcon } from '../icons'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: DashboardIcon, to: '/' },
   { label: 'Resumes', icon: ResumesIcon, to: null },
   { label: 'Jobs', icon: JobsIcon, to: '/jobs' },
   { label: 'Candidates', icon: CandidatesIcon, to: null },
-  { label: 'Analytics', icon: AnalyticsIcon, to: null },
-  { label: 'Settings', icon: SettingsIcon, to: null },
 ]
 
 function Sidebar() {
