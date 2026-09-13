@@ -2,7 +2,7 @@ from logging.config import fileConfig
 
 from alembic import context
 
-from database import Base, engine
+from database import Base, database_url, get_engine
 from models.candidate import Candidate
 from models.cv import CV
 from models.education import Education
@@ -27,7 +27,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=str(engine.url),
+        url=database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -39,7 +39,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    with engine.connect() as connection:
+    with get_engine().connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

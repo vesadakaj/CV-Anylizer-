@@ -1,12 +1,19 @@
-from fastapi import FastAPI, Depends
+import os
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 
 from routers.cv import router as cv_router
 from routers.job import router as job_router
 from routers.match import router as match_router
-from database import get_db
-from models.candidate import Candidate
+
+DEFAULT_CORS_ORIGINS = "http://localhost:5173"
+
+
+def parse_cors_origins(value: str | None) -> list[str]:
+    """Split the comma-separated `CORS_ORIGINS` setting into origins."""
+    raw = value if value and value.strip() else DEFAULT_CORS_ORIGINS
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 app = FastAPI(title="CV Analyzer API")
@@ -14,7 +21,7 @@ app = FastAPI(title="CV Analyzer API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=parse_cors_origins(os.getenv("CORS_ORIGINS")),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -42,25 +49,3 @@ app.include_router(
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-
-@app.post("/test-candidate")
-def create_test_candidate(db: Session = Depends(get_db)):
-    candidate = Candidate(
-        full_name="Test Candidate",
-        email="test@example.com",
-        phone="123456",
-        location="Prishtina"
-    )
-
-    db.add(candidate)
-    db.commit()
-    db.refresh(candidate)
-
-    return {
-        "id": candidate.id,
-        "full_name": candidate.full_name,
-        "email": candidate.email,
-        "phone": candidate.phone,
-        "location": candidate.location
-    }

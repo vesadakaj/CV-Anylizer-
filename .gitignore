@@ -12,6 +12,7 @@ Backend/**/__pycache__/
 .env
 Frontend/.env
 Backend/.env
+Backend/*.db
 
 # Editor / OS
 .vscode/

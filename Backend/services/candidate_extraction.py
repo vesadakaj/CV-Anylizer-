@@ -1,9 +1,7 @@
-import os
-
 import anthropic
 from pydantic import BaseModel
 
-MODEL = "claude-opus-5"
+from services.llm import MODEL, LLMConfigurationError, get_client
 
 SYSTEM_PROMPT = (
     "You extract structured candidate information from CV/resume text. "
@@ -66,13 +64,10 @@ class CandidateExtractionError(Exception):
 
 
 def extract_candidate_info(cv_text: str) -> CandidateInfo:
-    api_key = os.getenv("LLM_API_KEY")
-    if not api_key:
-        raise CandidateExtractionError(
-            "LLM_API_KEY is not configured. Set it in the backend .env file."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client = get_client()
+    except LLMConfigurationError as exc:
+        raise CandidateExtractionError(str(exc)) from exc
 
     try:
         response = client.messages.parse(

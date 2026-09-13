@@ -1,7 +1,14 @@
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# The suite builds its own in-memory engine per test (see the `engine`
+# fixture), but anything that reaches `database.get_engine()` directly must
+# also land on SQLite and never on the MSSQL server named in `.env`. Set the
+# URL before `database` is imported; `load_dotenv()` does not override it.
+os.environ["DATABASE_URL"] = "sqlite://"
 
 import pytest
 from fastapi.testclient import TestClient

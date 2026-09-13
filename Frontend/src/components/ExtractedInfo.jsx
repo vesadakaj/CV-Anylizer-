@@ -4,6 +4,11 @@ import { initials } from '../lib/scoreTier'
 
 const TABS = ['Personal Info', 'Experience', 'Education', 'Skills', 'Languages', 'Projects']
 
+// Skill and language rows come straight from the extractor today and carry
+// no id, so fall back to the (stable, never reordered) position. The LLM can
+// return the same name twice, which must not produce duplicate keys. Once the
+// profile is read back from the API (`/api/cvs/{id}`) the rows carry `id`.
+
 function ExtractedInfo({ candidate }) {
   const [tab, setTab] = useState(TABS[0])
 
@@ -69,8 +74,8 @@ function ExtractedInfo({ candidate }) {
               <h3>Top Skills</h3>
               {candidate.skills.length ? (
                 <div className="chip-row">
-                  {candidate.skills.slice(0, 10).map((skill) => (
-                    <span className="chip" key={skill.name}>
+                  {candidate.skills.slice(0, 10).map((skill, i) => (
+                    <span className="chip" key={skill.id ?? i}>
                       {skill.name}
                     </span>
                   ))}
@@ -83,8 +88,8 @@ function ExtractedInfo({ candidate }) {
               <h3>Languages</h3>
               {candidate.languages.length ? (
                 <div className="chip-row">
-                  {candidate.languages.map((lang) => (
-                    <span className="chip" key={lang.name}>
+                  {candidate.languages.map((lang, i) => (
+                    <span className="chip" key={lang.id ?? i}>
                       {lang.name}
                       {lang.level ? ` (${lang.level})` : ''}
                     </span>
@@ -138,8 +143,8 @@ function ExtractedInfo({ candidate }) {
         {tab === 'Skills' &&
           (candidate.skills.length ? (
             <div className="chip-row">
-              {candidate.skills.map((skill) => (
-                <span className="chip" key={skill.name}>
+              {candidate.skills.map((skill, i) => (
+                <span className="chip" key={skill.id ?? i}>
                   {skill.name}
                   {skill.proficiency_level ? ` · ${skill.proficiency_level}` : ''}
                 </span>
@@ -152,8 +157,8 @@ function ExtractedInfo({ candidate }) {
         {tab === 'Languages' &&
           (candidate.languages.length ? (
             <div className="chip-row">
-              {candidate.languages.map((lang) => (
-                <span className="chip" key={lang.name}>
+              {candidate.languages.map((lang, i) => (
+                <span className="chip" key={lang.id ?? i}>
                   {lang.name}
                   {lang.level ? ` (${lang.level})` : ''}
                 </span>

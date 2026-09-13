@@ -12,9 +12,20 @@ function extractErrorMessage(data) {
 }
 
 async function parseJsonResponse(response) {
-  const data = await response.json().catch(() => ({}))
+  const data = await response.json().catch(() => null)
   if (!response.ok) {
-    const error = new Error(extractErrorMessage(data))
+    const error = new Error(extractErrorMessage(data ?? {}))
+    error.status = response.status
+    throw error
+  }
+  // A successful response that isn't JSON almost always means the request
+  // never reached the API (e.g. VITE_API_URL unset, so the Vite dev server
+  // answered with index.html). Surface that instead of handing callers an
+  // empty object that crashes on `data.jobs`.
+  if (data === null) {
+    const error = new Error(
+      'The API returned a non-JSON response. Is VITE_API_URL set in Frontend/.env and the backend running?',
+    )
     error.status = response.status
     throw error
   }
