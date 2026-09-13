@@ -9,7 +9,7 @@ const TABS = ['Personal Info', 'Experience', 'Education', 'Skills', 'Languages',
 // return the same name twice, which must not produce duplicate keys. Once the
 // profile is read back from the API (`/api/cvs/{id}`) the rows carry `id`.
 
-function ExtractedInfo({ candidate }) {
+function ExtractedInfo({ candidate, loading = false, error = '' }) {
   const [tab, setTab] = useState(TABS[0])
 
   if (!candidate) {
@@ -18,9 +18,17 @@ function ExtractedInfo({ candidate }) {
         <div className="card-header-row">
           <h2 className="card-title">Extracted Information</h2>
         </div>
-        <p className="empty-hint">
-          Select a completed CV from Recent Uploads to view its extracted information.
-        </p>
+        {error ? (
+          <p className="upload-message error" role="alert">
+            {error}
+          </p>
+        ) : (
+          <p className="empty-hint" aria-live="polite">
+            {loading
+              ? 'Loading extracted information…'
+              : 'Select a completed CV from Recent Uploads to view its extracted information.'}
+          </p>
+        )}
       </section>
     )
   }

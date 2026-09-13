@@ -20,7 +20,6 @@ function JobsPage() {
   const [status, setStatus] = useState('idle') // idle | loading | success | error
   const [errorMessage, setErrorMessage] = useState('')
   const [jobs, setJobs] = useState([])
-  const [totalCandidates, setTotalCandidates] = useState(0)
 
   const [searchText, setSearchText] = useState('')
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS)
@@ -36,7 +35,6 @@ function JobsPage() {
     fetchJobs()
       .then((data) => {
         setJobs(data.jobs)
-        setTotalCandidates(data.total_candidates)
         setStatus('success')
       })
       .catch((err) => {
@@ -295,7 +293,7 @@ function JobsPage() {
                     <th scope="col">Required skills</th>
                     <th scope="col">Status</th>
                     <th scope="col">Posting date</th>
-                    <th scope="col">Candidates</th>
+                    <th scope="col">Applications</th>
                     <th scope="col">Actions</th>
                   </tr>
                 </thead>
@@ -354,7 +352,7 @@ function JobsPage() {
                       <th scope="col">Required skills</th>
                       <th scope="col">Status</th>
                       <th scope="col">Posting date</th>
-                      <th scope="col">Candidates</th>
+                      <th scope="col">Applications</th>
                       <th scope="col">Actions</th>
                     </tr>
                   </thead>
@@ -389,7 +387,7 @@ function JobsPage() {
                           </span>
                         </td>
                         <td>{formatDate(job.posting_date)}</td>
-                        <td>{totalCandidates}</td>
+                        <td>{job.applications_count}</td>
                         <td>
                           <div className="jobs-row-actions">
                             <button
@@ -413,11 +411,6 @@ function JobsPage() {
                   </tbody>
                 </table>
               </div>
-
-              <p className="table-note">
-                "Candidates" is the total number of candidates currently in the system — every job
-                is ranked against the same pool.
-              </p>
 
               <div className="pagination">
                 <button type="button" disabled={clampedPage === 1} onClick={() => setPage(clampedPage - 1)}>

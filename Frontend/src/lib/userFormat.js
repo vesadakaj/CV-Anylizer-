@@ -6,10 +6,19 @@ export function initialsFor(fullName) {
   return `${first}${last}`.toUpperCase()
 }
 
+// The API serialises naive UTC datetimes without a zone suffix; treat those
+// as UTC so they render in the viewer's local time.
+export function parseServerDate(value) {
+  if (!value) return null
+  const text = String(value)
+  const date = new Date(text.endsWith('Z') || /[+-]\d\d:\d\d$/.test(text) ? text : `${text}Z`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 export function formatDateTime(value) {
   if (!value) return 'Never'
-  const date = new Date(value.endsWith('Z') || value.includes('+') ? value : `${value}Z`)
-  if (Number.isNaN(date.getTime())) return value
+  const date = parseServerDate(value)
+  if (!date) return value
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',

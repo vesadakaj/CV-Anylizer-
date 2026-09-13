@@ -1,6 +1,8 @@
 import { ResumesIcon } from '../icons'
+import { scoreTierClass } from '../lib/scoreTier'
 
 function timeAgo(timestamp) {
+  if (timestamp == null) return ''
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000))
   if (seconds < 60) return 'just now'
   const minutes = Math.floor(seconds / 60)
@@ -18,18 +20,21 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function statusLabel(status) {
-  switch (status) {
+// Row states: queued, processing, ready, updated existing, failed. "Updated
+// existing" is a ready row whose upload replaced the CV of an Application
+// that already existed for that Job (Q14).
+function statusLabel(row) {
+  switch (row.status) {
     case 'queued':
       return 'Queued'
     case 'processing':
       return 'Processing…'
     case 'ready':
-      return 'Ready'
+      return row.application?.status === 'updated' ? 'Updated existing' : 'Ready'
     case 'failed':
       return 'Failed'
     default:
-      return status
+      return row.status
   }
 }
 
@@ -44,58 +49,158 @@ function statusPillClass(status) {
   }
 }
 
-function RecentUploads({ items, selectedCandidateId, isProcessing, onSelect, onRetry }) {
+/**
+ * The list of CVs in play. On the dashboard it is the batch: server-side
+ * Unattached CVs merged with this session's queue, each ready row with a
+ * checkbox (`selection` given). On the Job page it is the uploads for that
+ * Job with their score inline (`selection` omitted).
+ *
+ * `rows` carry the queue item shape (see useCvUploadQueue) plus, for rows
+ * that came from the server, `source: 'server'` and no `candidateInfo`.
+ */
+function RecentUploads({
+  title = 'Recent Uploads',
+  rows,
+  viewedCvId = null,
+  isProcessing,
+  onView,
+  onRetry,
+  selection = null,
+  attachedByCvId = {},
+  loadStatus = 'ready', // idle | loading | ready | error
+  loadError = '',
+  onReload,
+  emptyHint = 'Uploaded resumes from this session will show up here.',
+}) {
+  const showSelection = selection != null
+
   return (
     <section className="card recent-uploads-card">
       <div className="card-header-row">
-        <h2 className="card-title">Recent Uploads</h2>
+        <h2 className="card-title">{title}</h2>
+        {showSelection && selection.selectableCount > 0 && (
+          <span className="recent-uploads-count" aria-live="polite">
+            {selection.selectedCount} of {selection.selectableCount} selected
+          </span>
+        )}
       </div>
 
-      {items.length === 0 ? (
-        <p className="empty-hint">Uploaded resumes from this session will show up here.</p>
+      {showSelection && selection.selectableCount > 0 && (
+        <div className="recent-uploads-toolbar">
+          <button type="button" className="link-button" onClick={selection.onSelectAll}>
+            Select all
+          </button>
+          <button type="button" className="link-button" onClick={selection.onSelectNone}>
+            Select none
+          </button>
+        </div>
+      )}
+
+      {loadStatus === 'loading' && rows.length === 0 && (
+        <p className="empty-hint" aria-live="polite">
+          Loading your unattached CVs…
+        </p>
+      )}
+
+      {loadStatus === 'error' && (
+        <div className="recent-uploads-load-error">
+          <p className="upload-message error" role="alert">
+            {loadError}
+          </p>
+          {onReload && (
+            <button type="button" className="link-button" onClick={onReload}>
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
+      {rows.length === 0 && loadStatus !== 'loading' ? (
+        <p className="empty-hint">{emptyHint}</p>
       ) : (
         <ul className="recent-uploads-list">
-          {items.map((item) => {
-            const isSelectable = item.status === 'ready'
-            const isSelected = isSelectable && item.candidateId === selectedCandidateId
+          {rows.map((row) => {
+            const isReady = row.status === 'ready'
+            const attachedTo = row.cvId != null ? attachedByCvId[row.cvId] : null
+            const isViewable = isReady && onView != null
+            const isViewed = isReady && row.cvId != null && row.cvId === viewedCvId
+            const isSelectable = showSelection && isReady && row.cvId != null && !attachedTo
+            const isSelected = isSelectable && selection.isSelected(row.cvId)
+            const score = row.match?.overall_score
+            const scored = row.match?.status === 'scored' && score != null
 
             return (
               <li
-                key={item.id}
-                className={`recent-upload-item status-${item.status}${isSelected ? ' selected' : ''}`}
+                key={row.id}
+                className={`recent-upload-item status-${row.status}${isViewed ? ' selected' : ''}${
+                  attachedTo ? ' attached' : ''
+                }`}
               >
                 <div className="recent-upload-row">
+                  {showSelection && (
+                    <span className="recent-upload-check">
+                      {isSelectable ? (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => selection.onToggle(row.cvId)}
+                          aria-label={`Include ${row.filename} in the batch`}
+                        />
+                      ) : (
+                        <span className="recent-upload-check-placeholder" aria-hidden="true" />
+                      )}
+                    </span>
+                  )}
+
                   <button
                     type="button"
                     className="recent-upload-main"
-                    onClick={() => isSelectable && onSelect(item)}
-                    disabled={!isSelectable}
-                    aria-pressed={isSelected}
+                    onClick={() => isViewable && onView(row)}
+                    disabled={!isViewable}
+                    aria-pressed={isViewed}
                     aria-label={
-                      isSelectable
-                        ? `View extracted information for ${item.filename}`
-                        : `${item.filename}, ${statusLabel(item.status).toLowerCase()}`
+                      isViewable
+                        ? `View extracted information for ${row.filename}`
+                        : `${row.filename}, ${statusLabel(row).toLowerCase()}`
                     }
                   >
                     <span className="recent-upload-icon" aria-hidden="true">
                       <ResumesIcon />
                     </span>
-                    <span className="recent-upload-name">{item.filename}</span>
-                    {item.sizeBytes != null && (
-                      <span className="recent-upload-size">{formatFileSize(item.sizeBytes)}</span>
+                    <span className="recent-upload-name">
+                      {row.filename}
+                      {row.candidateName && (
+                        <span className="recent-upload-candidate"> · {row.candidateName}</span>
+                      )}
+                    </span>
+                    {row.sizeBytes != null && (
+                      <span className="recent-upload-size">{formatFileSize(row.sizeBytes)}</span>
                     )}
-                    <span className="recent-upload-time">{timeAgo(item.addedAt)}</span>
+                    <span className="recent-upload-time">{timeAgo(row.addedAt)}</span>
                   </button>
 
-                  <span className={`pill ${statusPillClass(item.status)}`}>
-                    {statusLabel(item.status)}
-                  </span>
+                  {scored && (
+                    <span className={`recent-upload-score ${scoreTierClass(score)}`}>
+                      {Math.round(score)}%
+                    </span>
+                  )}
+                  {isReady && row.match && row.match.status !== 'scored' && (
+                    <span className="recent-upload-score tier-unknown">Unscorable</span>
+                  )}
 
-                  {item.status === 'failed' && (
+                  {attachedTo ? (
+                    <span className="pill pill-neutral" title={`Scored against ${attachedTo.jobTitle}`}>
+                      Attached to {attachedTo.jobTitle}
+                    </span>
+                  ) : (
+                    <span className={`pill ${statusPillClass(row.status)}`}>{statusLabel(row)}</span>
+                  )}
+
+                  {row.status === 'failed' && (
                     <button
                       type="button"
                       className="table-action-button"
-                      onClick={() => onRetry(item.id)}
+                      onClick={() => onRetry(row.id)}
                       disabled={isProcessing}
                     >
                       Retry
@@ -103,9 +208,27 @@ function RecentUploads({ items, selectedCandidateId, isProcessing, onSelect, onR
                   )}
                 </div>
 
-                {item.status === 'failed' && item.error && (
+                {isReady && (row.linkable === false || row.matchedExisting) && (
+                  <div className="recent-upload-flags">
+                    {row.linkable === false && (
+                      <span
+                        className="upload-flag"
+                        title="No email address was found in this CV, so it can never be merged with another CV of the same person."
+                      >
+                        No email, will not merge
+                      </span>
+                    )}
+                    {row.matchedExisting && (
+                      <span className="upload-flag" title="Matched an existing candidate by email.">
+                        Existing candidate
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {row.status === 'failed' && row.error && (
                   <p className="recent-upload-error" role="alert">
-                    {item.error}
+                    {row.error}
                   </p>
                 )}
               </li>

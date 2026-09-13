@@ -9,6 +9,8 @@ import CreateJobPage from './pages/CreateJobPage'
 import LoginPage from './pages/LoginPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 import UsersPage from './pages/UsersPage'
+import CandidatesPage from './pages/CandidatesPage'
+import CandidateDetailPage from './pages/CandidateDetailPage'
 import { loginPathFor } from './lib/authContext'
 import { useAuth } from './lib/authContext'
 import './App.css'
@@ -95,6 +97,8 @@ function App() {
         <Route path="/jobs/new" element={<CreateJobPage />} />
         <Route path="/jobs/:jobId/matches" element={<JobMatchesPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+        <Route path="/candidates" element={<CandidatesPage />} />
+        <Route path="/candidates/:candidateId" element={<CandidateDetailPage />} />
         <Route
           path="/users"
           element={

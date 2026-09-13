@@ -1,7 +1,7 @@
 import { apiFetch, jsonRequest, parseJsonResponse } from './apiFetch'
 
-// Shared by the Jobs page and the Job Description analyzer's "Select
-// existing job" tab, so both read from a single implementation.
+// Shared by the Jobs page and the Job Description card's "Select existing
+// job" tab, so both read from a single implementation.
 export async function fetchJobs() {
   const response = await apiFetch('/api/jobs')
   return parseJsonResponse(response)
@@ -12,19 +12,27 @@ export async function fetchJob(jobId) {
   return parseJsonResponse(response)
 }
 
-// Shared by the Dashboard's inline candidate-matches card and the standalone
-// "View matches" page, so ranking-fetch logic lives in exactly one place.
+// A Job's Applications ranked by stored score. Summary rows only; the
+// breakdown of one Application is `fetchApplicationMatch`.
 export async function fetchJobMatches(jobId, { limit = 20, offset = 0 } = {}) {
   const response = await apiFetch(`/api/jobs/${jobId}/matches?limit=${limit}&offset=${offset}`)
   return parseJsonResponse(response)
 }
 
-// Scores exactly one candidate against exactly one job - the deterministic
-// individual-match endpoint, as opposed to fetchJobMatches() which ranks
-// every candidate. Used by the Dashboard's single-selected-candidate match
-// card so selecting a CV never triggers a full re-ranking.
-export async function matchCandidateToJob(candidateId, jobId) {
-  const response = await apiFetch(`/api/match/${candidateId}/${jobId}`, { method: 'POST' })
+// Scores a batch of CVs against one Job: one Application per CV, created
+// or updated, each returned with its match. This is the dashboard's
+// "Score N CVs against <job>" action.
+export async function scoreCvsAgainstJob(jobId, cvIds) {
+  const response = await apiFetch(
+    `/api/jobs/${jobId}/applications`,
+    jsonRequest('POST', { cv_ids: cvIds }),
+  )
+  return parseJsonResponse(response)
+}
+
+// The full breakdown and explanation of one Application's score.
+export async function fetchApplicationMatch(applicationId) {
+  const response = await apiFetch(`/api/applications/${applicationId}/match`)
   return parseJsonResponse(response)
 }
 

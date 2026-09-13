@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Modal from '../components/Modal'
 import { CopyIcon, PlusIcon } from '../icons'
 import { useAuth } from '../lib/authContext'
 import { formatDateTime } from '../lib/userFormat'
@@ -12,34 +13,6 @@ function generatePassword(length = 12) {
   const values = new Uint32Array(length)
   crypto.getRandomValues(values)
   return Array.from(values, (v) => PASSWORD_ALPHABET[v % PASSWORD_ALPHABET.length]).join('')
-}
-
-function Modal({ title, onClose, children }) {
-  const titleId = useId()
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
-
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal card" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <div className="modal-header">
-          <h2 className="card-title" id={titleId}>
-            {title}
-          </h2>
-          <button type="button" className="page-banner-dismiss" aria-label="Close dialog" onClick={onClose}>
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
 }
 
 // The temporary password is shown exactly once, here. After the dialog

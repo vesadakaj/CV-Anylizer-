@@ -1,19 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import {
-  CandidatesIcon,
-  DashboardIcon,
-  JobsIcon,
-  LogoutIcon,
-  ResumesIcon,
-  UsersIcon,
-} from '../icons'
+import { CandidatesIcon, DashboardIcon, JobsIcon, LogoutIcon, UsersIcon } from '../icons'
 import { useAuth } from '../lib/authContext'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: DashboardIcon, to: '/' },
-  { label: 'Resumes', icon: ResumesIcon, to: null },
   { label: 'Jobs', icon: JobsIcon, to: '/jobs' },
-  { label: 'Candidates', icon: CandidatesIcon, to: null },
+  { label: 'Candidates', icon: CandidatesIcon, to: '/candidates' },
   { label: 'Users', icon: UsersIcon, to: '/users', adminOnly: true },
 ]
 
@@ -35,30 +27,17 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav" aria-label="Main">
-        {NAV_ITEMS.filter(({ adminOnly }) => !adminOnly || isAdmin).map(({ label, icon: Icon, to }) =>
-          to ? (
-            <NavLink
-              key={label}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
-            >
-              <Icon />
-              <span>{label}</span>
-            </NavLink>
-          ) : (
-            <button
-              key={label}
-              type="button"
-              className="sidebar-nav-item"
-              disabled
-              title={`${label} — coming soon`}
-            >
-              <Icon />
-              <span>{label}</span>
-            </button>
-          ),
-        )}
+        {NAV_ITEMS.filter(({ adminOnly }) => !adminOnly || isAdmin).map(({ label, icon: Icon, to }) => (
+          <NavLink
+            key={label}
+            to={to}
+            end={to === '/'}
+            className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
+          >
+            <Icon />
+            <span>{label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       <button type="button" className="sidebar-logout" onClick={logout}>
