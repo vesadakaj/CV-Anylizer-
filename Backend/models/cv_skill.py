@@ -3,15 +3,18 @@ from sqlalchemy import Column, ForeignKey, Integer, String, Float
 from database import Base
 
 
-class CandidateSkill(Base):
+class CvSkill(Base):
+    """A skill extracted from one CV. The table keeps its historical name."""
+
     __tablename__ = "CandidateSkills"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    candidate_id = Column(
+    cv_id = Column(
         Integer,
-        ForeignKey("Candidates.id"),
-        nullable=False
+        ForeignKey("CVs.id"),
+        nullable=False,
+        index=True,
     )
 
     skill_id = Column(

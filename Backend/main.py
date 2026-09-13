@@ -4,11 +4,13 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from routers.applications import router as applications_router
 from routers.auth import router as auth_router
+from routers.candidates import router as candidates_router
 from routers.cv import router as cv_router
+from routers.cvs import router as cvs_router
 from routers.dependencies import get_current_user
 from routers.job import router as job_router
-from routers.match import router as match_router
 from routers.users import router as users_router
 from services.auth import jwt_secret
 
@@ -71,9 +73,23 @@ app.include_router(
 )
 
 app.include_router(
-    match_router,
-    prefix="/api/match",
-    tags=["match"],
+    cvs_router,
+    prefix="/api/cvs",
+    tags=["cvs"],
+    dependencies=[Depends(get_current_user)],
+)
+
+app.include_router(
+    candidates_router,
+    prefix="/api/candidates",
+    tags=["candidates"],
+    dependencies=[Depends(get_current_user)],
+)
+
+app.include_router(
+    applications_router,
+    prefix="/api/applications",
+    tags=["applications"],
     dependencies=[Depends(get_current_user)],
 )
 

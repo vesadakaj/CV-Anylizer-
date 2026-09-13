@@ -54,7 +54,37 @@ def decode_list(raw: str | None) -> list[str]:
     return [str(item) for item in data]
 
 
-def save_job(db: Session, job_info: JobInfo, description: str) -> Job:
+def _add_job_skills(db: Session, job_id: int, skills: list[tuple[str, bool]]) -> None:
+    """Attach (name, is_required) pairs to a Job. Names are deduplicated
+    case-insensitively; when the same name appears as both required and
+    preferred, required wins so the scorer never silently loses a criterion.
+    """
+    required_by_key: dict[str, bool] = {}
+    name_by_key: dict[str, str] = {}
+    for raw_name, is_required in skills:
+        name = raw_name.strip()
+        if not name:
+            continue
+        key = name.lower()
+        name_by_key.setdefault(key, name)
+        required_by_key[key] = required_by_key.get(key, False) or bool(is_required)
+
+    for key, name in name_by_key.items():
+        skill_row = _get_or_create_skill(db, name)
+        db.add(
+            JobSkill(
+                job_id=job_id,
+                skill_id=skill_row.id,
+                is_required=required_by_key[key],
+            )
+        )
+
+
+def save_job(
+    db: Session, job_info: JobInfo, description: str, *, created_by_user_id: int
+) -> Job:
+    """The quick path: persist the LLM's extraction as-is, keeping its
+    per-skill required/preferred flag."""
     try:
         job = Job(
             title=job_info.title,
@@ -63,21 +93,14 @@ def save_job(db: Session, job_info: JobInfo, description: str) -> Job:
             required_education=job_info.required_education,
             required_experience_years=job_info.required_experience_years,
             experience_description=job_info.experience_description,
+            created_by_user_id=created_by_user_id,
         )
         db.add(job)
         db.flush()
 
-        for skill in job_info.skills:
-            if not skill.name.strip():
-                continue
-            skill_row = _get_or_create_skill(db, skill.name)
-            db.add(
-                JobSkill(
-                    job_id=job.id,
-                    skill_id=skill_row.id,
-                    is_required=skill.is_required,
-                )
-            )
+        _add_job_skills(
+            db, job.id, [(skill.name, skill.is_required) for skill in job_info.skills]
+        )
 
         db.commit()
         db.refresh(job)
@@ -96,7 +119,8 @@ def create_manual_job(
     required_experience_years: float,
     required_education: str | None,
     posting_date: date | None,
-    skill_names: list[str],
+    skills: list[tuple[str, bool]],
+    created_by_user_id: int,
     location: str | None = None,
     department: str | None = None,
     employment_type: str | None = None,
@@ -107,8 +131,9 @@ def create_manual_job(
 ) -> Job:
     """Persist a job from user-reviewed structured data - no NLP/LLM call.
     Used both for fully manual entry and for saving an AI-extracted preview
-    after the user has reviewed and corrected it. Every skill passed here is
-    stored as required. Rolls back atomically on failure."""
+    after the user has reviewed and corrected it. `skills` carries the
+    reviewed required/preferred flag per skill. Rolls back atomically on
+    failure."""
     try:
         job = Job(
             title=title,
@@ -123,19 +148,12 @@ def create_manual_job(
             required_education=required_education,
             required_experience_years=required_experience_years,
             posting_date=posting_date,
+            created_by_user_id=created_by_user_id,
         )
         db.add(job)
         db.flush()
 
-        for name in skill_names:
-            skill_row = _get_or_create_skill(db, name)
-            db.add(
-                JobSkill(
-                    job_id=job.id,
-                    skill_id=skill_row.id,
-                    is_required=True,
-                )
-            )
+        _add_job_skills(db, job.id, skills)
 
         db.commit()
         db.refresh(job)

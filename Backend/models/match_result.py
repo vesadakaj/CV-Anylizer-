@@ -5,20 +5,19 @@ from database import Base
 
 
 class MatchResult(Base):
+    """The stored score of one Application (1:1). `algorithm_version` lets
+    the ranking recompute rows scored by an older formula on read; an
+    Unscorable Application has no row at all (CONTEXT.md, "Unscorable")."""
+
     __tablename__ = "MatchResults"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    candidate_id = Column(
+    application_id = Column(
         Integer,
-        ForeignKey("Candidates.id"),
-        nullable=False
-    )
-
-    job_id = Column(
-        Integer,
-        ForeignKey("Jobs.id"),
-        nullable=False
+        ForeignKey("Applications.id"),
+        nullable=False,
+        unique=True,
     )
 
     overall_score = Column(
@@ -49,6 +48,16 @@ class MatchResult(Base):
     explanation = Column(
         UnicodeText,
         nullable=True
+    )
+
+    algorithm_version = Column(
+        Integer,
+        nullable=False
+    )
+
+    scored_at = Column(
+        DateTime,
+        server_default=func.now()
     )
 
     created_at = Column(

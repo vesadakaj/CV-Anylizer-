@@ -8,12 +8,13 @@ from models.cv import CV
 from models.education import Education
 from models.work_experience import WorkExperience
 from models.skill import Skill
-from models.candidate_skill import CandidateSkill
+from models.cv_skill import CvSkill
 from models.language import Language
-from models.candidate_language import CandidateLanguage
+from models.cv_language import CvLanguage
 from models.project import Project
 from models.job import Job
 from models.job_skill import JobSkill
+from models.application import Application
 from models.match_result import MatchResult
 from models.user import User
 

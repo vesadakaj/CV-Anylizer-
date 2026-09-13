@@ -3,15 +3,18 @@ from sqlalchemy import Column, ForeignKey, Integer, String
 from database import Base
 
 
-class CandidateLanguage(Base):
+class CvLanguage(Base):
+    """A language extracted from one CV. The table keeps its historical name."""
+
     __tablename__ = "CandidateLanguages"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    candidate_id = Column(
+    cv_id = Column(
         Integer,
-        ForeignKey("Candidates.id"),
-        nullable=False
+        ForeignKey("CVs.id"),
+        nullable=False,
+        index=True,
     )
 
     language_id = Column(
