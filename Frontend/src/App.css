@@ -1881,3 +1881,272 @@ button {
   }
 }
 
+
+/* ---------- Auth pages (login, change password) ---------- */
+
+.auth-loading {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dash-bg);
+  color: var(--ink-dim);
+  font: 15px/1.5 var(--sans);
+}
+
+.auth-page {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: var(--dash-bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--sans);
+  text-align: left;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  gap: 6px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  margin-bottom: 18px;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.auth-subtitle {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-error {
+  font-size: 13px;
+}
+
+.auth-success {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pill-text);
+}
+
+.auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.auth-submit {
+  margin-top: 0;
+  align-self: stretch;
+  padding: 11px 18px;
+}
+
+.auth-actions .auth-submit {
+  align-self: center;
+  flex: 1;
+}
+
+.auth-actions .link-button {
+  text-decoration: none;
+}
+
+/* ---------- Topbar user menu ---------- */
+
+.topbar-menu {
+  position: relative;
+}
+
+button.topbar-user {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 12px;
+  padding: 6px 10px 6px 6px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.topbar-user:hover,
+button.topbar-user[aria-expanded='true'] {
+  background: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.topbar-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar-dropdown-header {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.topbar-dropdown-header strong {
+  font-size: 13.5px;
+}
+
+.topbar-dropdown-header small {
+  font-size: 12px;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.topbar-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.topbar-dropdown-item:hover {
+  background: var(--chip-bg);
+}
+
+/* ---------- Users page ---------- */
+
+.users-row-inactive td {
+  color: var(--ink-faint);
+}
+
+.users-you {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.users-flag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--tier-mid);
+  font-weight: 600;
+}
+
+.users-table .jobs-row-actions {
+  flex-wrap: wrap;
+}
+
+.page-banner.error {
+  background: #f8e3dc;
+  color: #a63b27;
+}
+
+/* ---------- Modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 31, 26, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 50;
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100svh - 48px);
+  overflow-y: auto;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal .job-form {
+  gap: 14px;
+}
+
+.reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reveal-intro {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+}
+
+.reveal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reveal-password {
+  flex: 1;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px dashed var(--card-border);
+  background: #fbf8f0;
+  user-select: all;
+}
+
+.reveal-row .table-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.create-job-button {
+  font-family: inherit;
+}

@@ -15,6 +15,7 @@ from models.project import Project
 from models.job import Job
 from models.job_skill import JobSkill
 from models.match_result import MatchResult
+from models.user import User
 
 config = context.config
 

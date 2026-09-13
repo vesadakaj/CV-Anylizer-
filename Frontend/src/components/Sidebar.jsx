@@ -1,14 +1,26 @@
 import { NavLink } from 'react-router-dom'
-import { CandidatesIcon, DashboardIcon, JobsIcon, LogoutIcon, ResumesIcon } from '../icons'
+import {
+  CandidatesIcon,
+  DashboardIcon,
+  JobsIcon,
+  LogoutIcon,
+  ResumesIcon,
+  UsersIcon,
+} from '../icons'
+import { useAuth } from '../lib/authContext'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: DashboardIcon, to: '/' },
   { label: 'Resumes', icon: ResumesIcon, to: null },
   { label: 'Jobs', icon: JobsIcon, to: '/jobs' },
   { label: 'Candidates', icon: CandidatesIcon, to: null },
+  { label: 'Users', icon: UsersIcon, to: '/users', adminOnly: true },
 ]
 
 function Sidebar() {
+  const { user, logout } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -23,7 +35,7 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav" aria-label="Main">
-        {NAV_ITEMS.map(({ label, icon: Icon, to }) =>
+        {NAV_ITEMS.filter(({ adminOnly }) => !adminOnly || isAdmin).map(({ label, icon: Icon, to }) =>
           to ? (
             <NavLink
               key={label}
@@ -49,7 +61,7 @@ function Sidebar() {
         )}
       </nav>
 
-      <button type="button" className="sidebar-logout" disabled title="Logout — not wired up yet">
+      <button type="button" className="sidebar-logout" onClick={logout}>
         <LogoutIcon />
         <span>Logout</span>
       </button>

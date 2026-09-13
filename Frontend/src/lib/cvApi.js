@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+import { apiFetch } from './apiFetch'
 
 // One CV = one request that does text extraction, NLP extraction, and
 // persistence together server-side (see Backend/routers/cv.py). There is no
@@ -8,7 +8,7 @@ export async function uploadCv(file) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await fetch(`${API_BASE}/api/cv/upload`, {
+  const response = await apiFetch('/api/cv/upload', {
     method: 'POST',
     body: formData,
   })
