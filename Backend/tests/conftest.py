@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # URL before `database` is imported; `load_dotenv()` does not override it.
 os.environ["DATABASE_URL"] = "sqlite://"
 # The app refuses to start without a signing secret; tests never need a real one.
-os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-0123456789")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,16 +19,17 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
-from models.user import User
+from models.user import ROLE_ADMIN, ROLE_MEMBER, User
 from routers.dependencies import get_current_user
 from services.auth import hash_password
 
 # Import every model so its table is registered on Base.metadata before
 # create_all() runs.
+import models.application  # noqa: F401
 import models.candidate  # noqa: F401
-import models.candidate_language  # noqa: F401
-import models.candidate_skill  # noqa: F401
 import models.cv  # noqa: F401
+import models.cv_language  # noqa: F401
+import models.cv_skill  # noqa: F401
 import models.education  # noqa: F401
 import models.job  # noqa: F401
 import models.job_skill  # noqa: F401
@@ -65,6 +66,7 @@ def db_session(engine):
 
 
 TEST_ADMIN_EMAIL = "tests@example.com"
+TEST_MEMBER_EMAIL = "member@example.com"
 TEST_ADMIN_PASSWORD = "password123"
 _test_password_hash = None
 
@@ -77,18 +79,45 @@ def test_password_hash() -> str:
     return _test_password_hash
 
 
-@pytest.fixture()
-def client(engine):
-    """A TestClient whose requests act as an active Admin.
+def get_or_create_user(db, email: str, *, role: str = ROLE_MEMBER, full_name: str | None = None) -> User:
+    """A User row for tests, created once per database. Every account
+    shares TEST_ADMIN_PASSWORD."""
+    user = db.query(User).filter(User.email == email).one_or_none()
+    if user is None:
+        user = User(
+            email=email,
+            full_name=full_name or email.split("@")[0].replace(".", " ").title(),
+            role=role,
+            password_hash=test_password_hash(),
+            is_active=True,
+            must_change_password=False,
+        )
+        db.add(user)
+        db.commit()
+    db.refresh(user)
+    return user
 
-    Every router except health and login sits behind `get_current_user`, so
-    the dependency is overridden here with a seeded Admin. Tests that need
-    the real token check (the auth and users routers, the route walk) drop
-    the override with `main.app.dependency_overrides.pop(get_current_user)`.
-    """
+
+@pytest.fixture()
+def user(db_session):
+    """The seeded Admin the `client` fixture acts as, available to tests that
+    create Jobs and CVs directly (both need an owner)."""
+    return get_or_create_user(db_session, TEST_ADMIN_EMAIL, role=ROLE_ADMIN, full_name="Test Admin")
+
+
+@pytest.fixture()
+def member(db_session):
+    return get_or_create_user(db_session, TEST_MEMBER_EMAIL, role=ROLE_MEMBER, full_name="Test Member")
+
+
+def _install_client(engine, acting_email: str | None, acting_role: str):
+    """Build a TestClient over `engine`. With `acting_email` the
+    `get_current_user` dependency is overridden by that (seeded) account;
+    without it the real Bearer check runs."""
     import main
 
     session_factory = sessionmaker(bind=engine)
+    acting = {"email": acting_email, "role": acting_role}
 
     def override_get_db():
         session = session_factory()
@@ -100,27 +129,46 @@ def client(engine):
     def override_current_user():
         session = session_factory()
         try:
-            user = session.query(User).filter(User.email == TEST_ADMIN_EMAIL).one_or_none()
-            if user is None:
-                user = User(
-                    email=TEST_ADMIN_EMAIL,
-                    full_name="Test Admin",
-                    role="admin",
-                    password_hash=test_password_hash(),
-                    is_active=True,
-                    must_change_password=False,
-                )
-                session.add(user)
-                session.commit()
-            session.refresh(user)
-            return user
+            return get_or_create_user(session, acting["email"], role=acting["role"])
         finally:
             session.close()
 
     main.app.dependency_overrides[get_db] = override_get_db
-    main.app.dependency_overrides[get_current_user] = override_current_user
+    if acting_email is not None:
+        main.app.dependency_overrides[get_current_user] = override_current_user
     try:
         with TestClient(main.app) as test_client:
+            # Overrides are global to the app, so one test cannot hold two
+            # clients with different identities; switch this one instead.
+            def act_as(email: str, role: str = ROLE_MEMBER):
+                acting["email"] = email
+                acting["role"] = role
+
+            test_client.act_as = act_as
             yield test_client
     finally:
         main.app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(engine):
+    """A TestClient whose requests act as an active Admin.
+
+    Every router except health and login sits behind `get_current_user`, so
+    the dependency is overridden here with a seeded Admin. Use
+    `member_client` to act as a Member and `anon_client` for the real
+    token check (the auth and users routers, the route walk).
+    """
+    yield from _install_client(engine, TEST_ADMIN_EMAIL, ROLE_ADMIN)
+
+
+@pytest.fixture()
+def member_client(engine):
+    yield from _install_client(engine, TEST_MEMBER_EMAIL, ROLE_MEMBER)
+
+
+@pytest.fixture()
+def anon_client(engine):
+    """No dependency override: requests carry whatever Authorization header
+    the test sets, and are rejected without one."""
+    yield from _install_client(engine, None, ROLE_MEMBER)
