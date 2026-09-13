@@ -2,11 +2,18 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import JobMatchesPage from './JobMatchesPage'
-import { fetchJobMatches } from '../lib/jobsApi'
+import { addCandidateToJob, fetchCandidate } from '../lib/candidatesApi'
+import { fetchJobMatches, fetchJobs } from '../lib/jobsApi'
 import { clampPercent } from '../lib/scoreTier'
 
 vi.mock('../lib/jobsApi', () => ({
   fetchJobMatches: vi.fn(),
+  fetchJobs: vi.fn(),
+}))
+
+vi.mock('../lib/candidatesApi', () => ({
+  fetchCandidate: vi.fn(),
+  addCandidateToJob: vi.fn(),
 }))
 
 function renderAt(jobId) {
@@ -19,29 +26,22 @@ function renderAt(jobId) {
   )
 }
 
-function makeCandidate(overrides = {}) {
+// One row of GET /api/jobs/{id}/matches: summary only. The extra fields
+// below never come from the API; they are here to prove the page would not
+// render them even if they did.
+function makeApplication(overrides = {}) {
   return {
+    rank: 1,
+    application_id: 501,
     candidate_id: 1,
-    job_id: 9,
+    cv_id: 71,
     candidate_name: 'Jane Doe',
-    job_title: 'Backend Developer',
     status: 'scored',
     overall_score: 67,
     skill_score: 50,
-    experience_score: 100,
-    education_score: 100,
-    matched_skills: [],
-    missing_required_skills: [],
-    matched_required_skills_count: 1,
-    total_required_skills: 2,
-    candidate_experience_years: 3,
-    required_experience_years: 3,
-    candidate_education_level: 'Bachelor',
-    required_education_level: 'Bachelor',
-    available_criteria: ['skills', 'experience', 'education'],
-    effective_weights: { skills: 50, experience: 30, education: 20 },
+    matched_skills: ['Python'],
+    missing_required_skills: ['SQL'],
     explanation: 'Some very long explanation about the match that should never render.',
-    rank: 1,
     ...overrides,
   }
 }
@@ -50,15 +50,15 @@ function makeRanking(overrides = {}) {
   return {
     job_id: 9,
     job_title: 'Senior Data Engineer',
-    total_candidates: 3,
-    returned_candidates: 3,
+    total_applications: 3,
+    returned_applications: 3,
     limit: 10,
     offset: 0,
     minimum_score: null,
-    candidates: [
-      makeCandidate({ candidate_id: 1, candidate_name: 'Jane Doe', overall_score: 67, rank: 1 }),
-      makeCandidate({ candidate_id: 2, candidate_name: 'Jane Whitmore', overall_score: 67, rank: 2 }),
-      makeCandidate({ candidate_id: 3, candidate_name: 'Melisa Bunjaku', overall_score: 40, rank: 3 }),
+    applications: [
+      makeApplication({ application_id: 501, candidate_id: 1, candidate_name: 'Jane Doe', overall_score: 67, rank: 1 }),
+      makeApplication({ application_id: 502, candidate_id: 2, candidate_name: 'Jane Whitmore', overall_score: 67, rank: 2 }),
+      makeApplication({ application_id: 503, candidate_id: 3, candidate_name: 'Melisa Bunjaku', overall_score: 40, rank: 3 }),
     ],
     ...overrides,
   }
@@ -72,27 +72,29 @@ describe('JobMatchesPage', () => {
   it('uses the wide layout container', async () => {
     fetchJobMatches.mockResolvedValue(makeRanking())
     const { container } = renderAt(9)
-    await waitFor(() => expect(screen.getByText('Candidate matches')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Applications' })).toBeInTheDocument())
     expect(container.querySelector('main.matches-page-container')).toBeInTheDocument()
   })
 
-  it('displays the real job title and candidate count', async () => {
+  it('displays the real job title and application count', async () => {
     fetchJobMatches.mockResolvedValue(makeRanking())
     renderAt(9)
     await waitFor(() => expect(screen.getByText('Senior Data Engineer')).toBeInTheDocument())
-    expect(screen.getByText('3 candidates ranked')).toBeInTheDocument()
+    expect(screen.getByText('3 applications ranked')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View job' })).toHaveAttribute('href', '/jobs/9')
   })
 
-  it('renders candidates in the order returned by the API (by rank)', async () => {
+  it('renders only what the endpoint returns, in rank order', async () => {
     fetchJobMatches.mockResolvedValue(makeRanking())
     renderAt(9)
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
 
     const names = screen.getAllByText(/Jane Doe|Jane Whitmore|Melisa Bunjaku/).map((el) => el.textContent)
     expect(names).toEqual(['Jane Doe', 'Jane Whitmore', 'Melisa Bunjaku'])
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
   })
 
-  it('shows rank, name, and percentage for each candidate', async () => {
+  it('shows rank, name (linking to the candidate) and percentage for each application', async () => {
     fetchJobMatches.mockResolvedValue(makeRanking())
     renderAt(9)
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
@@ -100,6 +102,7 @@ describe('JobMatchesPage', () => {
     const row = screen.getByText('Jane Doe').closest('li')
     expect(within(row).getByText('1')).toBeInTheDocument()
     expect(within(row).getByText('67% match')).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Jane Doe' })).toHaveAttribute('href', '/candidates/1')
   })
 
   it('sets progress bar width to reflect the percentage', async () => {
@@ -121,9 +124,9 @@ describe('JobMatchesPage', () => {
 
     fetchJobMatches.mockResolvedValue(
       makeRanking({
-        total_candidates: 1,
-        returned_candidates: 1,
-        candidates: [makeCandidate({ candidate_id: 1, candidate_name: 'Over Score', overall_score: 150, rank: 1 })],
+        total_applications: 1,
+        returned_applications: 1,
+        applications: [makeApplication({ candidate_name: 'Over Score', overall_score: 150 })],
       }),
     )
     renderAt(9)
@@ -132,20 +135,19 @@ describe('JobMatchesPage', () => {
     expect(bar.firstChild).toHaveStyle({ width: '100%' })
   })
 
-  it('keeps candidates with different IDs but the same name as separate rows', async () => {
+  it('keeps applications of different ids but the same name as separate rows', async () => {
     fetchJobMatches.mockResolvedValue(
       makeRanking({
-        total_candidates: 2,
-        returned_candidates: 2,
-        candidates: [
-          makeCandidate({ candidate_id: 7, candidate_name: 'Vesa Dakaj', overall_score: 28, rank: 1 }),
-          makeCandidate({ candidate_id: 8, candidate_name: 'Vesa Dakaj', overall_score: 28, rank: 2 }),
+        total_applications: 2,
+        returned_applications: 2,
+        applications: [
+          makeApplication({ application_id: 7, candidate_id: 7, candidate_name: 'Vesa Dakaj', overall_score: 28, rank: 1 }),
+          makeApplication({ application_id: 8, candidate_id: 8, candidate_name: 'Vesa Dakaj', overall_score: 28, rank: 2 }),
         ],
       }),
     )
     renderAt(9)
     await waitFor(() => expect(screen.getAllByText('Vesa Dakaj')).toHaveLength(2))
-    // Distinct DOM rows prove candidate_id (not name) is the React key/identity.
     const rows = screen.getAllByText('Vesa Dakaj').map((el) => el.closest('li'))
     expect(rows[0]).not.toBe(rows[1])
   })
@@ -168,11 +170,11 @@ describe('JobMatchesPage', () => {
   it('preserves global rank numbers across pages', async () => {
     fetchJobMatches.mockResolvedValueOnce(
       makeRanking({
-        total_candidates: 15,
-        returned_candidates: 10,
+        total_applications: 15,
+        returned_applications: 10,
         offset: 0,
-        candidates: Array.from({ length: 10 }, (_, i) =>
-          makeCandidate({ candidate_id: i + 1, candidate_name: `Candidate ${i + 1}`, rank: i + 1, overall_score: 50 }),
+        applications: Array.from({ length: 10 }, (_, i) =>
+          makeApplication({ application_id: i + 1, candidate_id: i + 1, candidate_name: `Candidate ${i + 1}`, rank: i + 1, overall_score: 50 }),
         ),
       }),
     )
@@ -181,11 +183,11 @@ describe('JobMatchesPage', () => {
 
     fetchJobMatches.mockResolvedValueOnce(
       makeRanking({
-        total_candidates: 15,
-        returned_candidates: 5,
+        total_applications: 15,
+        returned_applications: 5,
         offset: 10,
-        candidates: Array.from({ length: 5 }, (_, i) =>
-          makeCandidate({ candidate_id: i + 11, candidate_name: `Candidate ${i + 11}`, rank: i + 11, overall_score: 30 }),
+        applications: Array.from({ length: 5 }, (_, i) =>
+          makeApplication({ application_id: i + 11, candidate_id: i + 11, candidate_name: `Candidate ${i + 11}`, rank: i + 11, overall_score: 30 }),
         ),
       }),
     )
@@ -203,31 +205,32 @@ describe('JobMatchesPage', () => {
     fetchJobMatches.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve }))
     const { container } = renderAt(9)
 
-    expect(screen.getByText('Candidate matches')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Applications' })).toBeInTheDocument()
     expect(container.querySelectorAll('.skeleton-row').length).toBeGreaterThan(0)
 
     resolveFetch(makeRanking())
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
   })
 
-  it('shows the no-candidates message', async () => {
+  it('the empty state explains the two ways to add candidates', async () => {
     fetchJobMatches.mockResolvedValue(
-      makeRanking({ total_candidates: 0, returned_candidates: 0, candidates: [] }),
+      makeRanking({ total_applications: 0, returned_applications: 0, applications: [] }),
     )
     renderAt(9)
-    await waitFor(() =>
-      expect(screen.getByText('No candidates are available for this job.')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText('No one has applied to this job yet.')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: 'job page' })).toHaveAttribute('href', '/jobs/9')
+    expect(screen.getByRole('link', { name: 'dashboard' })).toHaveAttribute('href', '/?job=9')
+    expect(screen.getByRole('link', { name: 'Candidates' })).toHaveAttribute('href', '/candidates')
   })
 
   it('shows the unscorable-job message', async () => {
     fetchJobMatches.mockResolvedValue(
       makeRanking({
-        total_candidates: 2,
-        returned_candidates: 2,
-        candidates: [
-          makeCandidate({ candidate_id: 1, status: 'unscorable', overall_score: null, rank: 1 }),
-          makeCandidate({ candidate_id: 2, status: 'unscorable', overall_score: null, rank: 2 }),
+        total_applications: 2,
+        returned_applications: 2,
+        applications: [
+          makeApplication({ application_id: 1, status: 'unscorable', overall_score: null, rank: 1 }),
+          makeApplication({ application_id: 2, status: 'unscorable', overall_score: null, rank: 2 }),
         ],
       }),
     )
@@ -253,5 +256,107 @@ describe('JobMatchesPage', () => {
     renderAt(9)
     await waitFor(() => expect(screen.getByText('Could not load candidate matches.')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  describe('Add to another job', () => {
+    beforeEach(() => {
+      fetchJobMatches.mockResolvedValue(makeRanking())
+      fetchJobs.mockResolvedValue({
+        jobs: [
+          { job_id: 9, title: 'Senior Data Engineer', company_name: 'Acme', ready_to_match: true, applications_count: 3 },
+          { job_id: 12, title: 'Platform Engineer', company_name: 'Acme', ready_to_match: true, applications_count: 0 },
+          { job_id: 13, title: 'Vague Role', company_name: 'Acme', ready_to_match: false, applications_count: 0 },
+        ],
+      })
+    })
+
+    it('posts the right body with the newest CV preselected and shows a toast', async () => {
+      fetchCandidate.mockResolvedValue({
+        id: 1,
+        full_name: 'Jane Doe',
+        cvs: [{ cv_id: 71, file_name: 'jane.pdf', uploaded_at: '2026-09-14T08:00:00' }],
+        applications: [{ application_id: 501, job_id: 9 }],
+      })
+      addCandidateToJob.mockResolvedValue({
+        application_id: 900,
+        status: 'created',
+        candidate_name: 'Jane Doe',
+        match: { status: 'scored', overall_score: 80 },
+      })
+      renderAt(9)
+      await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+      const row = screen.getByText('Jane Doe').closest('li')
+      fireEvent.click(within(row).getByRole('button', { name: 'Add to another job' }))
+
+      const dialog = await screen.findByRole('dialog', { name: 'Add Jane Doe to a job' })
+      await waitFor(() => expect(fetchCandidate).toHaveBeenCalledWith(1))
+      // The current Job is excluded; a Job that is not ready cannot be chosen.
+      await waitFor(() => expect(within(dialog).getByText('Platform Engineer')).toBeInTheDocument())
+      expect(within(dialog).queryByText('Senior Data Engineer')).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('radio', { name: /vague role/i })).toBeDisabled()
+      // One CV: no CV picker.
+      expect(within(dialog).queryByText('Score from which CV?')).not.toBeInTheDocument()
+
+      fireEvent.click(within(dialog).getByRole('radio', { name: /platform engineer/i }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Add to Platform Engineer' }))
+
+      await waitFor(() => expect(addCandidateToJob).toHaveBeenCalledWith(1, { jobId: 12, cvId: 71 }))
+      expect(await screen.findByRole('status')).toHaveTextContent('Jane Doe was added to Platform Engineer. Score: 80%.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('offers a CV picker when the candidate has more than one CV and words an update', async () => {
+      fetchCandidate.mockResolvedValue({
+        id: 1,
+        full_name: 'Jane Doe',
+        cvs: [
+          { cv_id: 72, file_name: 'newest.pdf', uploaded_at: '2026-09-14T08:00:00' },
+          { cv_id: 71, file_name: 'older.pdf', uploaded_at: '2026-09-01T08:00:00' },
+        ],
+        applications: [{ application_id: 501, job_id: 9 }, { application_id: 502, job_id: 12 }],
+      })
+      addCandidateToJob.mockResolvedValue({
+        application_id: 502,
+        status: 'updated',
+        candidate_name: 'Jane Doe',
+        match: { status: 'scored', overall_score: 61 },
+      })
+      renderAt(9)
+      await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+      fireEvent.click(within(screen.getByText('Jane Doe').closest('li')).getByRole('button', { name: 'Add to another job' }))
+
+      const dialog = await screen.findByRole('dialog')
+      await waitFor(() => expect(within(dialog).getByText('Score from which CV?')).toBeInTheDocument())
+      expect(within(dialog).getByRole('radio', { name: /newest\.pdf/i })).toBeChecked()
+      expect(within(dialog).getByText('Already applied')).toBeInTheDocument()
+
+      fireEvent.click(within(dialog).getByRole('radio', { name: /older\.pdf/i }))
+      fireEvent.click(within(dialog).getByRole('radio', { name: /platform engineer/i }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Add to Platform Engineer' }))
+
+      await waitFor(() => expect(addCandidateToJob).toHaveBeenCalledWith(1, { jobId: 12, cvId: 71 }))
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Jane Doe was already in Platform Engineer; the application now uses the chosen CV and was rescored. Score: 61%.',
+      )
+    })
+
+    it('shows the API error inside the dialog and keeps it open', async () => {
+      fetchCandidate.mockResolvedValue({ id: 1, full_name: 'Jane Doe', cvs: [{ cv_id: 71, file_name: 'jane.pdf' }], applications: [] })
+      addCandidateToJob.mockRejectedValue(new Error('Could not save the application.'))
+      renderAt(9)
+      await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+      fireEvent.click(within(screen.getByText('Jane Doe').closest('li')).getByRole('button', { name: 'Add to another job' }))
+
+      const dialog = await screen.findByRole('dialog')
+      fireEvent.click(await within(dialog).findByRole('radio', { name: /platform engineer/i }))
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Add to Platform Engineer' }))
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not save the application.')
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 })
