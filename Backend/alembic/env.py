@@ -26,6 +26,14 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Autogenerate wraps table alterations in `with op.batch_alter_table(...)`
+# instead of emitting a bare op.alter_column/op.drop_column. SQLite has no
+# ALTER for those, so batch mode recreates the table, copies the rows and
+# renames; on MSSQL it passes straight through to a plain ALTER TABLE.
+# Migrations here are authored once and have to run on both, so without this
+# a generated revision works in production and fails on SQLite -- exactly how
+# 0d7648a5ece7 broke `alembic upgrade head` for the test and dev databases.
+
 
 def run_migrations_offline() -> None:
     context.configure(
@@ -34,6 +42,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        render_as_batch=True,
     )
 
     with context.begin_transaction():
@@ -46,6 +55,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            render_as_batch=True,
         )
 
         with context.begin_transaction():
