@@ -112,11 +112,11 @@ function CreateJobPage() {
       jobInfo.required_experience_years != null ? String(jobInfo.required_experience_years) : '',
     )
     setEducation(normalizeEducationOption(jobInfo.required_education))
+    // Keep the LLM's per-skill flag; the reviewer can flip any chip.
     setSkills(
       (jobInfo.skills || [])
-        .filter((s) => s.is_required !== false)
-        .map((s) => s.name)
-        .filter(Boolean),
+        .filter((s) => s.name)
+        .map((s) => ({ name: s.name, is_required: s.is_required !== false })),
     )
     setResponsibilities(jobInfo.responsibilities || [])
     setRequiredQualifications(jobInfo.required_qualifications || [])
@@ -147,17 +147,25 @@ function CreateJobPage() {
   const addSkill = () => {
     const name = skillInput.trim()
     if (!name) return
-    if (skills.some((s) => s.toLowerCase() === name.toLowerCase())) {
+    if (skills.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
       setSkillInput('')
       return
     }
-    setSkills((prev) => [...prev, name])
+    setSkills((prev) => [...prev, { name, is_required: true }])
     setSkillInput('')
     setErrors((prev) => ({ ...prev, skills: undefined }))
   }
 
   const removeSkill = (name) => {
-    setSkills((prev) => prev.filter((s) => s !== name))
+    setSkills((prev) => prev.filter((s) => s.name !== name))
+  }
+
+  // Required skills count toward the score; preferred ones are shown on the
+  // job and never scored (Q10, Q17, Q25).
+  const toggleSkillRequired = (name) => {
+    setSkills((prev) =>
+      prev.map((s) => (s.name === name ? { ...s, is_required: !s.is_required } : s)),
+    )
   }
 
   const handleSkillKeyDown = (e) => {
@@ -177,7 +185,7 @@ function CreateJobPage() {
       next.experience = 'Enter a required experience of 0 or more years.'
     }
 
-    if (skills.length === 0) next.skills = 'Add at least one required skill.'
+    if (skills.length === 0) next.skills = 'Add at least one skill.'
 
     setErrors(next)
     return Object.keys(next).length === 0
@@ -201,7 +209,7 @@ function CreateJobPage() {
         posting_date: postingDate || null,
         required_experience_years: Number(experience),
         required_education: education === 'Not specified' ? null : education,
-        required_skills: skills,
+        skills: skills.map((s) => ({ name: s.name, is_required: s.is_required })),
         responsibilities,
         required_qualifications: requiredQualifications,
         preferred_qualifications: preferredQualifications,
@@ -387,7 +395,11 @@ function CreateJobPage() {
           </div>
 
           <div className="form-field">
-            <label htmlFor="job-skill-input">Required skills</label>
+            <label htmlFor="job-skill-input">Skills</label>
+            <p className="field-hint">
+              Mark each skill Required or Preferred. Only required skills count toward the match score;
+              preferred ones are shown on the job.
+            </p>
             <div className="skill-input-row">
               <input
                 id="job-skill-input"
@@ -405,9 +417,19 @@ function CreateJobPage() {
 
             {skills.length > 0 && (
               <div className="chip-row">
-                {skills.map((name) => (
-                  <span className="chip removable-chip" key={name}>
+                {skills.map(({ name, is_required }) => (
+                  <span className={`chip removable-chip skill-chip${is_required ? '' : ' chip-muted'}`} key={name}>
                     {name}
+                    <button
+                      type="button"
+                      className={`chip-toggle${is_required ? ' required' : ''}`}
+                      aria-pressed={is_required}
+                      aria-label={`${name}: ${is_required ? 'required' : 'preferred'}. Toggle`}
+                      title={is_required ? 'Required - counts toward the score' : 'Preferred - shown, never scored'}
+                      onClick={() => toggleSkillRequired(name)}
+                    >
+                      {is_required ? 'Required' : 'Preferred'}
+                    </button>
                     <button
                       type="button"
                       className="chip-remove"

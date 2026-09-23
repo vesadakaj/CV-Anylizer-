@@ -8,10 +8,11 @@ class Project(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    candidate_id = Column(
+    cv_id = Column(
         Integer,
-        ForeignKey("Candidates.id"),
-        nullable=False
+        ForeignKey("CVs.id"),
+        nullable=False,
+        index=True,
     )
 
     name = Column(

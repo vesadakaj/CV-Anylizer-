@@ -1,10 +1,9 @@
-import os
 from datetime import date
 
 import anthropic
 from pydantic import BaseModel
 
-MODEL = "claude-opus-5"
+from services.llm import MODEL, LLMConfigurationError, get_client
 
 SYSTEM_PROMPT = (
     "You extract structured job posting information from job description text. "
@@ -55,13 +54,10 @@ class JobExtractionError(Exception):
 
 
 def extract_job_info(job_description: str) -> JobInfo:
-    api_key = os.getenv("LLM_API_KEY")
-    if not api_key:
-        raise JobExtractionError(
-            "LLM_API_KEY is not configured. Set it in the backend .env file."
-        )
-
-    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client = get_client()
+    except LLMConfigurationError as exc:
+        raise JobExtractionError(str(exc)) from exc
 
     try:
         response = client.messages.parse(

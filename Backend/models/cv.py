@@ -5,6 +5,9 @@ from database import Base
 
 
 class CV(Base):
+    """One uploaded document and, through the profile tables keyed by
+    `cv_id`, the Profile extracted from it (ADR 0001)."""
+
     __tablename__ = "CVs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -12,6 +15,14 @@ class CV(Base):
     candidate_id = Column(
         Integer,
         ForeignKey("Candidates.id"),
+        nullable=False
+    )
+
+    # Recorded for "my Unattached CVs" on the dashboard; never used to
+    # restrict what a User can see (ADR 0002).
+    uploaded_by_user_id = Column(
+        Integer,
+        ForeignKey("Users.id"),
         nullable=False
     )
 

@@ -17,14 +17,19 @@ function nextLocalId() {
 /**
  * Drives a strictly sequential CV upload queue: exactly one item is ever
  * "processing" at a time, and /api/cv/upload is never called concurrently.
+ * The dashboard (no Job) and the Job page (with `jobId`) share this hook;
+ * the only difference is whether each upload is attached to a Job.
  *
- * Each item: { id, file, filename, sizeBytes, addedAt, status, candidateId,
- * candidateInfo, error }, where status is 'queued' | 'processing' | 'ready'
- * | 'failed'. `id` (a local, stable id) is the identity to use as a React
- * key for the item's whole lifetime; `candidateId` (only set once status is
- * 'ready') is the persisted candidate's identity for selection/matching.
+ * Each item: { id, file, filename, sizeBytes, addedAt, status, cvId,
+ * candidateId, candidateInfo, linkable, matchedExisting, application,
+ * match, error }, where status is 'queued' | 'processing' | 'ready' |
+ * 'failed'. `id` (a local, stable id) is the identity to use as a React
+ * key for the item's whole lifetime; `cvId` (only set once status is
+ * 'ready') is the persisted CV's identity for selection and scoring.
+ * `application` is `{ id, status: 'created' | 'updated' }` when the upload
+ * was attached to a Job, and `match` its stored Match Result.
  */
-export function useCvUploadQueue({ onReady } = {}) {
+export function useCvUploadQueue({ onReady, jobId = null } = {}) {
   const [items, setItems] = useState([])
   // Guards against React StrictMode's deliberate double-invocation of
   // effects in development, which would otherwise fire uploadCv() twice for
@@ -32,6 +37,8 @@ export function useCvUploadQueue({ onReady } = {}) {
   const dispatchedRef = useRef(new Set())
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
+  const jobIdRef = useRef(jobId)
+  jobIdRef.current = jobId
   // Flipped false on unmount so an in-flight upload's resolution never calls
   // setState (and never reports onReady) after the component is gone.
   const mountedRef = useRef(true)
@@ -57,13 +64,18 @@ export function useCvUploadQueue({ onReady } = {}) {
 
     updateItem(next.id, { status: 'processing' })
 
-    uploadCv(next.file)
+    uploadCv(next.file, { jobId: jobIdRef.current })
       .then((data) => {
         if (!mountedRef.current) return
         updateItem(next.id, {
           status: 'ready',
+          cvId: data.cv_id ?? null,
           candidateId: data.candidate_id,
           candidateInfo: data.candidate_info,
+          linkable: data.linkable !== false,
+          matchedExisting: Boolean(data.candidate_matched_existing),
+          application: data.application || null,
+          match: data.match || null,
           error: '',
         })
         onReadyRef.current?.(next.id, data)
@@ -95,8 +107,13 @@ export function useCvUploadQueue({ onReady } = {}) {
         sizeBytes: file.size,
         addedAt: Date.now(),
         status: 'queued',
+        cvId: null,
         candidateId: null,
         candidateInfo: null,
+        linkable: true,
+        matchedExisting: false,
+        application: null,
+        match: null,
         error: '',
       })
     }

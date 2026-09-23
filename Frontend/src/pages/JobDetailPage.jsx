@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import RecentUploads from '../components/RecentUploads'
+import UploadResume from '../components/UploadResume'
 import { fetchJob } from '../lib/jobsApi'
 import { formatDate, formatExperience } from '../lib/jobFormat'
+import { useCvUploadQueue } from '../lib/useCvUploadQueue'
 
 function JobDetailPage() {
   const { jobId: jobIdParam } = useParams()
@@ -12,6 +15,14 @@ function JobDetailPage() {
   const [status, setStatus] = useState('idle') // idle | loading | success | error | not_found
   const [errorMessage, setErrorMessage] = useState('')
   const [job, setJob] = useState(null)
+
+  // Uploads here are attached to this Job in the same request, so a CV
+  // uploaded on this page is never Unattached.
+  const { items, isProcessing, addFiles, retry } = useCvUploadQueue({
+    jobId: isValidId ? jobId : null,
+  })
+  const newApplications = items.filter((item) => item.application?.status === 'created').length
+  const applicationsCount = (job?.applications_count ?? 0) + newApplications
 
   const loadJob = () => {
     if (!isValidId) {
@@ -87,10 +98,22 @@ function JobDetailPage() {
                   {job.title}
                 </h1>
                 {job.company_name && <p className="page-subtitle">{job.company_name}</p>}
+                <p className="job-meta job-created-by">
+                  Created by {job.created_by || 'unknown'}
+                  {job.created_at ? ` · ${formatDate(job.created_at)}` : ''}
+                </p>
               </div>
-              <span className={`pill ${job.ready_to_match ? 'pill-success' : 'pill-warning'}`}>
-                {job.ready_to_match ? 'Ready to match' : 'Missing requirements'}
-              </span>
+              <div className="job-detail-header-side">
+                <span className={`pill ${job.ready_to_match ? 'pill-success' : 'pill-warning'}`}>
+                  {job.ready_to_match ? 'Ready to match' : 'Missing requirements'}
+                </span>
+                <p className="job-applications-count">
+                  <strong>{applicationsCount}</strong> application{applicationsCount === 1 ? '' : 's'}
+                </p>
+                <Link to={`/jobs/${job.job_id}/matches`} className="link-button">
+                  View all applications
+                </Link>
+              </div>
             </div>
 
             <div className="job-detail-meta-grid">
@@ -112,6 +135,27 @@ function JobDetailPage() {
               </div>
             </div>
           </section>
+
+          <div className="job-upload-grid">
+            <UploadResume
+              isProcessing={isProcessing}
+              onFilesSelected={addFiles}
+              title="Upload CVs for this job"
+              subtitle={
+                job.ready_to_match
+                  ? 'Each CV is extracted, attached to this job and scored in one step.'
+                  : 'CVs are attached to this job but cannot be scored until it has a usable requirement.'
+              }
+              className="job-upload-card"
+            />
+            <RecentUploads
+              title="Uploads for this job"
+              rows={[...items].reverse()}
+              isProcessing={isProcessing}
+              onRetry={retry}
+              emptyHint="CVs uploaded here show up with their score."
+            />
+          </div>
 
           {job.description && (
             <section className="card job-detail-card" aria-labelledby="job-description-heading">
@@ -154,15 +198,13 @@ function JobDetailPage() {
             </div>
 
             <p className="job-section-label">Required Skills</p>
-            {job.skills.some((s) => s.is_required) ? (
+            {job.required_skills.length > 0 ? (
               <div className="chip-row">
-                {job.skills
-                  .filter((s) => s.is_required)
-                  .map((skill) => (
-                    <span className="chip" key={skill.name}>
-                      {skill.name}
-                    </span>
-                  ))}
+                {job.required_skills.map((name) => (
+                  <span className="chip" key={name}>
+                    {name}
+                  </span>
+                ))}
               </div>
             ) : (
               <p className="empty-hint">Not specified.</p>
@@ -192,9 +234,24 @@ function JobDetailPage() {
               In Addition, They May Have
             </h2>
             <p className="empty-hint">
-              Preferred qualifications are informational only and never count toward the
+              Preferred skills and qualifications are informational only and never count toward the
               candidate match score.
             </p>
+
+            <p className="job-section-label">Preferred Skills</p>
+            {job.preferred_skills.length > 0 ? (
+              <div className="chip-row">
+                {job.preferred_skills.map((name) => (
+                  <span className="chip chip-muted" key={name}>
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-hint">None.</p>
+            )}
+
+            <p className="job-section-label">Preferred Qualifications</p>
             {job.preferred_qualifications.length > 0 ? (
               <ul className="job-detail-list">
                 {job.preferred_qualifications.map((item, index) => (

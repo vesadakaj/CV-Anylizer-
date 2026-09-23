@@ -1,7 +1,13 @@
 import { useRef, useState } from 'react'
 import { UploadCloudIcon } from '../icons'
 
-function UploadResume({ isProcessing, onFilesSelected }) {
+function UploadResume({
+  isProcessing,
+  onFilesSelected,
+  title = 'Upload Resume',
+  subtitle = 'Upload a PDF or DOCX file to analyze',
+  className = 'upload-card',
+}) {
   const [rejectedMessage, setRejectedMessage] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef(null)
@@ -42,9 +48,9 @@ function UploadResume({ isProcessing, onFilesSelected }) {
   }
 
   return (
-    <section className="card upload-card">
-      <h2 className="card-title">Upload Resume</h2>
-      <p className="card-subtitle">Upload a PDF or DOCX file to analyze</p>
+    <section className={`card ${className}`}>
+      <h2 className="card-title">{title}</h2>
+      <p className="card-subtitle">{subtitle}</p>
 
       <div
         className={`dropzone${isDragging ? ' dragging' : ''}${isProcessing ? ' disabled' : ''}`}

@@ -1,74 +1,49 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+import { apiFetch, jsonRequest, parseJsonResponse } from './apiFetch'
 
-// FastAPI's 422 validation errors return `detail` as an array of error
-// objects, not a string - stringifying it directly renders "[object
-// Object]". Every other error path already returns a plain string.
-function extractErrorMessage(data) {
-  if (typeof data.detail === 'string') return data.detail
-  if (Array.isArray(data.detail) && data.detail.length > 0) {
-    return data.detail.map((item) => item.msg || JSON.stringify(item)).join(' ')
-  }
-  return 'Something went wrong. Please try again.'
-}
-
-async function parseJsonResponse(response) {
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const error = new Error(extractErrorMessage(data))
-    error.status = response.status
-    throw error
-  }
-  return data
-}
-
-// Shared by the Jobs page and the Job Description analyzer's "Select
-// existing job" tab, so both read from a single implementation.
+// Shared by the Jobs page and the Job Description card's "Select existing
+// job" tab, so both read from a single implementation.
 export async function fetchJobs() {
-  const response = await fetch(`${API_BASE}/api/jobs`)
+  const response = await apiFetch('/api/jobs')
   return parseJsonResponse(response)
 }
 
 export async function fetchJob(jobId) {
-  const response = await fetch(`${API_BASE}/api/jobs/${jobId}`)
+  const response = await apiFetch(`/api/jobs/${jobId}`)
   return parseJsonResponse(response)
 }
 
-// Shared by the Dashboard's inline candidate-matches card and the standalone
-// "View matches" page, so ranking-fetch logic lives in exactly one place.
+// A Job's Applications ranked by stored score. Summary rows only; the
+// breakdown of one Application is `fetchApplicationMatch`.
 export async function fetchJobMatches(jobId, { limit = 20, offset = 0 } = {}) {
-  const response = await fetch(
-    `${API_BASE}/api/jobs/${jobId}/matches?limit=${limit}&offset=${offset}`,
+  const response = await apiFetch(`/api/jobs/${jobId}/matches?limit=${limit}&offset=${offset}`)
+  return parseJsonResponse(response)
+}
+
+// Scores a batch of CVs against one Job: one Application per CV, created
+// or updated, each returned with its match. This is the dashboard's
+// "Score N CVs against <job>" action.
+export async function scoreCvsAgainstJob(jobId, cvIds) {
+  const response = await apiFetch(
+    `/api/jobs/${jobId}/applications`,
+    jsonRequest('POST', { cv_ids: cvIds }),
   )
   return parseJsonResponse(response)
 }
 
-// Scores exactly one candidate against exactly one job - the deterministic
-// individual-match endpoint, as opposed to fetchJobMatches() which ranks
-// every candidate. Used by the Dashboard's single-selected-candidate match
-// card so selecting a CV never triggers a full re-ranking.
-export async function matchCandidateToJob(candidateId, jobId) {
-  const response = await fetch(`${API_BASE}/api/match/${candidateId}/${jobId}`, {
-    method: 'POST',
-  })
+// The full breakdown and explanation of one Application's score.
+export async function fetchApplicationMatch(applicationId) {
+  const response = await apiFetch(`/api/applications/${applicationId}/match`)
   return parseJsonResponse(response)
 }
 
 // Manual, structured job creation - no NLP/LLM extraction involved.
 export async function createJob(payload) {
-  const response = await fetch(`${API_BASE}/api/jobs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const response = await apiFetch('/api/jobs', jsonRequest('POST', payload))
   return parseJsonResponse(response)
 }
 
 export async function analyzeJob(description) {
-  const response = await fetch(`${API_BASE}/api/jobs/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description }),
-  })
+  const response = await apiFetch('/api/jobs/analyze', jsonRequest('POST', { description }))
   return parseJsonResponse(response)
 }
 
@@ -76,10 +51,6 @@ export async function analyzeJob(description) {
 // expected to let the user review/correct the result, then pass it to
 // createJob() to actually save it.
 export async function analyzeJobPreview(description) {
-  const response = await fetch(`${API_BASE}/api/jobs/analyze-preview`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description }),
-  })
+  const response = await apiFetch('/api/jobs/analyze-preview', jsonRequest('POST', { description }))
   return parseJsonResponse(response)
 }

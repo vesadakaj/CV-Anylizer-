@@ -1,13 +1,35 @@
 import { CheckCircleIcon } from '../icons'
 import { scoreLabel } from '../lib/scoreTier'
 
-function MatchingFactors({ candidate }) {
+function MatchingFactors({ candidate, loading = false, error = '' }) {
+  if (loading) {
+    return (
+      <section className="card matching-factors-card">
+        <h2 className="card-title">Matching Factors</h2>
+        <p className="empty-hint" aria-live="polite">
+          Loading breakdown…
+        </p>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section className="card matching-factors-card">
+        <h2 className="card-title">Matching Factors</h2>
+        <p className="upload-message error" role="alert">
+          {error}
+        </p>
+      </section>
+    )
+  }
+
   if (!candidate) {
     return (
       <section className="card matching-factors-card">
         <h2 className="card-title">Matching Factors</h2>
         <p className="empty-hint">
-          Shows a breakdown for the top-ranked candidate once a job has been analyzed.
+          Shows the breakdown for the application you pick in Candidate Match Results.
         </p>
       </section>
     )
@@ -37,10 +59,15 @@ function MatchingFactors({ candidate }) {
     })
   }
 
+  const preferredTotal = candidate.total_preferred_skills || 0
+  const preferredMatched = candidate.preferred_skills_matched?.length || 0
+
   return (
     <section className="card matching-factors-card">
       <h2 className="card-title">Matching Factors</h2>
-      <p className="card-subtitle">Top candidate: {candidate.candidate_name}</p>
+      <p className="card-subtitle">
+        {candidate.candidate_name} vs {candidate.job_title}
+      </p>
 
       {factors.length === 0 ? (
         <p className="empty-hint">
@@ -60,6 +87,20 @@ function MatchingFactors({ candidate }) {
           ))}
         </div>
       )}
+
+      {preferredTotal > 0 && (
+        <p className="factor-preferred">
+          Also has {preferredMatched} of {preferredTotal} preferred skill{preferredTotal === 1 ? '' : 's'}
+          {preferredMatched > 0 ? ` (${candidate.preferred_skills_matched.join(', ')})` : ''}. Preferred
+          skills never count toward the score.
+        </p>
+      )}
+
+      {candidate.missing_required_skills?.length > 0 && (
+        <p className="factor-missing">Missing required skills: {candidate.missing_required_skills.join(', ')}</p>
+      )}
+
+      {candidate.explanation && <p className="factor-explanation">{candidate.explanation}</p>}
     </section>
   )
 }

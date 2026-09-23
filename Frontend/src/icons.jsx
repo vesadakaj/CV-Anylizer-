@@ -178,3 +178,32 @@ export function PdfFileIcon(props) {
     </svg>
   )
 }
+
+export function UsersIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="7.5" cy="6.5" r="2.8" />
+      <path d="M2.5 16.5c0-2.9 2.2-4.8 5-4.8s5 1.9 5 4.8" />
+      <circle cx="14" cy="7.5" r="2.2" />
+      <path d="M13.2 11.7c2.4 0 4.3 1.6 4.3 4.1" />
+    </svg>
+  )
+}
+
+export function KeyIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="7" cy="12" r="3.5" />
+      <path d="M9.6 9.6 16.5 2.8M13.5 5.8l2 2M15 4.3l2 2" />
+    </svg>
+  )
+}
+
+export function CopyIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="7" y="7" width="10" height="10" rx="1.6" />
+      <path d="M13 7V4.5A1.5 1.5 0 0 0 11.5 3h-7A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13H7" />
+    </svg>
+  )
+}

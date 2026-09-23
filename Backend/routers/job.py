@@ -8,10 +8,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.candidate import Candidate
+from models.application import Application
 from models.job import Job
 from models.job_skill import JobSkill
 from models.skill import Skill
+from models.user import User
+from routers.applications import ApplicationRow, application_result_to_row
+from routers.dependencies import get_current_user
+from services.applications import (
+    ApplicationPersistenceError,
+    create_or_update_applications,
+)
 from services.job_extraction import JobExtractionError, JobInfo, extract_job_info
 from services.job_persistence import (
     JobPersistenceError,
@@ -20,10 +27,11 @@ from services.job_persistence import (
     save_job,
 )
 from services.matching import (
+    CvNotFoundError,
     JobNotFoundError,
     JobRankingResponse,
     MatchPersistenceError,
-    get_job_candidate_matches,
+    get_job_ranking,
     normalize_education_level,
 )
 
@@ -36,12 +44,20 @@ class JobDescriptionRequest(BaseModel):
     description: str
 
 
+class SkillInput(BaseModel):
+    name: str
+    is_required: bool = True
+
+
 class CreateJobRequest(BaseModel):
     title: str
     company_name: str
     required_experience_years: float = Field(ge=0)
     required_education: str | None = None
-    required_skills: list[str] = Field(min_length=1)
+    # Each entry is `{name, is_required}`; a plain string means required.
+    skills: list[SkillInput | str] = []
+    # Older clients send the required set here; kept as an alias.
+    required_skills: list[str] = []
     posting_date: date | None = None
     location: str | None = None
     department: str | None = None
@@ -67,12 +83,12 @@ class JobSummary(BaseModel):
     skills: list[JobSkillSummary]
     required_skills_count: int
     ready_to_match: bool
+    applications_count: int
     created_at: datetime | None
 
 
 class JobListResponse(BaseModel):
     jobs: list[JobSummary]
-    total_candidates: int
 
 
 class JobDetail(BaseModel):
@@ -91,9 +107,17 @@ class JobDetail(BaseModel):
     required_qualifications: list[str]
     preferred_qualifications: list[str]
     skills: list[JobSkillSummary]
+    required_skills: list[str]
+    preferred_skills: list[str]
     required_skills_count: int
+    applications_count: int
     ready_to_match: bool
+    created_by: str | None
     created_at: datetime | None
+
+
+class ApplyCvsRequest(BaseModel):
+    cv_ids: list[int] = Field(min_length=1)
 
 
 class JobAnalyzePreviewResponse(BaseModel):
@@ -117,10 +141,21 @@ def _compute_ready_to_match(
     return required_skills_count > 0 or has_valid_experience or has_valid_education
 
 
-def _job_to_detail(job: Job, skills: list[JobSkillSummary]) -> JobDetail:
-    required_skills_count = sum(1 for skill in skills if skill.is_required)
+def _job_to_detail(
+    db: Session, job: Job, skills: list[JobSkillSummary]
+) -> JobDetail:
+    required_skills = [skill.name for skill in skills if skill.is_required]
+    preferred_skills = [skill.name for skill in skills if not skill.is_required]
+    required_skills_count = len(required_skills)
     ready_to_match = _compute_ready_to_match(
         required_skills_count, job.required_experience_years, job.required_education
+    )
+    creator = db.get(User, job.created_by_user_id)
+    applications_count = (
+        db.query(func.count(Application.id))
+        .filter(Application.job_id == job.id)
+        .scalar()
+        or 0
     )
 
     return JobDetail(
@@ -139,8 +174,12 @@ def _job_to_detail(job: Job, skills: list[JobSkillSummary]) -> JobDetail:
         required_qualifications=decode_list(job.required_qualifications),
         preferred_qualifications=decode_list(job.preferred_qualifications),
         skills=skills,
+        required_skills=required_skills,
+        preferred_skills=preferred_skills,
         required_skills_count=required_skills_count,
+        applications_count=applications_count,
         ready_to_match=ready_to_match,
+        created_by=creator.full_name if creator else None,
         created_at=job.created_at,
     )
 
@@ -157,7 +196,9 @@ def _load_skills_for_job(db: Session, job_id: int) -> list[JobSkillSummary]:
 
 @router.post("/analyze")
 async def analyze_job(
-    payload: JobDescriptionRequest, db: Session = Depends(get_db)
+    payload: JobDescriptionRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     description = payload.description.strip()
     if not description:
@@ -171,7 +212,7 @@ async def analyze_job(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     try:
-        job = save_job(db, job_info, description=description)
+        job = save_job(db, job_info, description=description, created_by_user_id=user.id)
     except JobPersistenceError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -201,8 +242,14 @@ async def analyze_job_preview(payload: JobDescriptionRequest):
 
 
 @router.post("", response_model=JobDetail, status_code=201)
-def create_job(payload: CreateJobRequest, db: Session = Depends(get_db)):
-    """Create a job from structured form fields - no NLP/LLM extraction."""
+def create_job(
+    payload: CreateJobRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a job from structured form fields - no NLP/LLM extraction.
+    Skills keep their reviewed required/preferred flag; a plain string means
+    required."""
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Job title is required.")
@@ -215,21 +262,28 @@ def create_job(payload: CreateJobRequest, db: Session = Depends(get_db)):
         payload.required_education.strip() if payload.required_education else None
     ) or None
 
-    seen: set[str] = set()
-    skill_names: list[str] = []
-    for raw in payload.required_skills:
-        name = raw.strip()
+    incoming: list[tuple[str, bool]] = [
+        (entry, True) if isinstance(entry, str) else (entry.name, entry.is_required)
+        for entry in payload.skills
+    ]
+    incoming.extend((name, True) for name in payload.required_skills)
+
+    # Deduplicate case-insensitively; required wins over preferred for the
+    # same name so a reviewed criterion is never silently dropped.
+    required_by_key: dict[str, bool] = {}
+    name_by_key: dict[str, str] = {}
+    for raw_name, is_required in incoming:
+        name = raw_name.strip()
         if not name:
             continue
         key = name.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        skill_names.append(name)
+        name_by_key.setdefault(key, name)
+        required_by_key[key] = required_by_key.get(key, False) or is_required
+    skills = [(name_by_key[key], required_by_key[key]) for key in name_by_key]
 
-    if not skill_names:
+    if not skills:
         raise HTTPException(
-            status_code=400, detail="At least one required skill is needed."
+            status_code=400, detail="At least one skill is needed."
         )
 
     location = (payload.location.strip() if payload.location else None) or None
@@ -247,7 +301,8 @@ def create_job(payload: CreateJobRequest, db: Session = Depends(get_db)):
             required_experience_years=payload.required_experience_years,
             required_education=required_education,
             posting_date=payload.posting_date,
-            skill_names=skill_names,
+            skills=skills,
+            created_by_user_id=user.id,
             location=location,
             department=department,
             employment_type=employment_type,
@@ -259,8 +314,10 @@ def create_job(payload: CreateJobRequest, db: Session = Depends(get_db)):
     except JobPersistenceError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    skills = [JobSkillSummary(name=name, is_required=True) for name in skill_names]
-    return _job_to_detail(job, skills)
+    summaries = [
+        JobSkillSummary(name=name, is_required=is_required) for name, is_required in skills
+    ]
+    return _job_to_detail(db, job, summaries)
 
 
 @router.get("", response_model=JobListResponse)
@@ -281,6 +338,18 @@ def list_jobs(db: Session = Depends(get_db)):
                 JobSkillSummary(name=row.name, is_required=row.is_required)
             )
 
+    applications_by_job: dict[int, int] = {}
+    if jobs:
+        applications_by_job = {
+            row.job_id: row.count
+            for row in db.query(
+                Application.job_id, func.count(Application.id).label("count")
+            )
+            .filter(Application.job_id.in_(job_ids))
+            .group_by(Application.job_id)
+            .all()
+        }
+
     summaries: list[JobSummary] = []
     for job in jobs:
         skills = skills_by_job.get(job.id, [])
@@ -300,13 +369,12 @@ def list_jobs(db: Session = Depends(get_db)):
                 skills=skills,
                 required_skills_count=required_skills_count,
                 ready_to_match=ready_to_match,
+                applications_count=applications_by_job.get(job.id, 0),
                 created_at=job.created_at,
             )
         )
 
-    total_candidates = db.query(func.count(Candidate.id)).scalar() or 0
-
-    return JobListResponse(jobs=summaries, total_candidates=total_candidates)
+    return JobListResponse(jobs=summaries)
 
 
 @router.get("/{job_id}", response_model=JobDetail)
@@ -316,22 +384,48 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
 
     skills = _load_skills_for_job(db, job_id)
-    return _job_to_detail(job, skills)
+    return _job_to_detail(db, job, skills)
+
+
+@router.post(
+    "/{job_id}/applications", response_model=list[ApplicationRow], status_code=201
+)
+def apply_cvs_to_job(
+    job_id: int,
+    payload: ApplyCvsRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Score a batch of CVs against this Job: one Application per CV,
+    created or updated, each returned with its match."""
+    try:
+        results = create_or_update_applications(db, job_id, payload.cv_ids, user)
+    except (JobNotFoundError, CvNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ApplicationPersistenceError, MatchPersistenceError) as exc:
+        logger.error("Application persistence failed: %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Could not save the applications."
+        ) from exc
+
+    return [application_result_to_row(result) for result in results]
 
 
 @router.get("/{job_id}/matches", response_model=JobRankingResponse)
-def rank_candidates_for_job(
+def rank_applications_for_job(
     job_id: int,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     minimum_score: float | None = Query(None, ge=0, le=100),
     db: Session = Depends(get_db),
 ):
+    """This Job's Applications ranked by stored score. Summary rows only;
+    the breakdown is `GET /api/applications/{id}/match`."""
     try:
-        return get_job_candidate_matches(
+        return get_job_ranking(
             db, job_id, limit=limit, offset=offset, minimum_score=minimum_score
         )
-    except JobNotFoundError as exc:
+    except (JobNotFoundError, CvNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MatchPersistenceError as exc:
         logger.error("Match persistence failed: %s", exc)

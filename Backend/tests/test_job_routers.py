@@ -5,17 +5,15 @@ database)."""
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
-from models.candidate import Candidate
 from models.job import Job
 from models.job_skill import JobSkill
 from models.skill import Skill
+from services.applications import create_or_update_applications
+from tests.factories import make_candidate_with_cv, make_job
 
 
-def _make_job(db, **kwargs):
-    defaults = dict(title="Job", description="desc")
-    defaults.update(kwargs)
-    job = Job(**defaults)
-    db.add(job)
+def _make_job(db, user, **kwargs):
+    job = make_job(db, user, **kwargs)
     db.commit()
     db.refresh(job)
     return job
@@ -24,11 +22,11 @@ def _make_job(db, **kwargs):
 def test_list_jobs_empty_returns_empty_list(client):
     response = client.get("/api/jobs")
     assert response.status_code == 200
-    assert response.json() == {"jobs": [], "total_candidates": 0}
+    assert response.json() == {"jobs": []}
 
 
-def test_list_jobs_without_requirements_is_not_ready_to_match(client, db_session):
-    _make_job(db_session, title="Barista")
+def test_list_jobs_without_requirements_is_not_ready_to_match(client, db_session, user):
+    _make_job(db_session, user, title="Barista")
     response = client.get("/api/jobs")
     assert response.status_code == 200
     body = response.json()
@@ -39,8 +37,8 @@ def test_list_jobs_without_requirements_is_not_ready_to_match(client, db_session
     assert job["skills"] == []
 
 
-def test_list_jobs_with_required_skill_is_ready_to_match(client, db_session):
-    job = _make_job(db_session, title="Backend Engineer")
+def test_list_jobs_with_required_skill_is_ready_to_match(client, db_session, user):
+    job = _make_job(db_session, user, title="Backend Engineer")
     skill = Skill(name="Python")
     db_session.add(skill)
     db_session.commit()
@@ -56,35 +54,42 @@ def test_list_jobs_with_required_skill_is_ready_to_match(client, db_session):
     assert body["skills"] == [{"name": "Python", "is_required": True}]
 
 
-def test_list_jobs_with_valid_required_experience_is_ready_to_match(client, db_session):
-    _make_job(db_session, title="Data Analyst", required_experience_years=3)
+def test_list_jobs_with_valid_required_experience_is_ready_to_match(client, db_session, user):
+    _make_job(db_session, user, title="Data Analyst", required_experience_years=3)
     response = client.get("/api/jobs")
     body = response.json()["jobs"][0]
     assert body["ready_to_match"] is True
 
 
-def test_list_jobs_with_mappable_required_education_is_ready_to_match(client, db_session):
-    _make_job(db_session, title="Researcher", required_education="Master's degree")
+def test_list_jobs_with_mappable_required_education_is_ready_to_match(client, db_session, user):
+    _make_job(db_session, user, title="Researcher", required_education="Master's degree")
     response = client.get("/api/jobs")
     body = response.json()["jobs"][0]
     assert body["ready_to_match"] is True
 
 
-def test_list_jobs_orders_most_recent_first(client, db_session):
-    _make_job(db_session, title="First")
-    _make_job(db_session, title="Second")
+def test_list_jobs_orders_most_recent_first(client, db_session, user):
+    _make_job(db_session, user, title="First")
+    _make_job(db_session, user, title="Second")
     response = client.get("/api/jobs")
     titles = [job["title"] for job in response.json()["jobs"]]
     assert titles == ["Second", "First"]
 
 
-def test_list_jobs_returns_total_candidate_count(client, db_session):
-    db_session.add_all([Candidate(full_name="A"), Candidate(full_name="B")])
+def test_list_jobs_returns_per_job_applications_count(client, db_session, user):
+    job_with_two = _make_job(db_session, user, title="Two")
+    job_with_none = _make_job(db_session, user, title="None")
+    _, cv_a = make_candidate_with_cv(db_session, user, "A")
+    _, cv_b = make_candidate_with_cv(db_session, user, "B")
     db_session.commit()
-    _make_job(db_session)
+    create_or_update_applications(db_session, job_with_two.id, [cv_a.id, cv_b.id], user)
 
     response = client.get("/api/jobs")
-    assert response.json()["total_candidates"] == 2
+    jobs = response.json()["jobs"]
+    counts = {job["title"]: job["applications_count"] for job in jobs}
+    assert counts == {"Two": 2, "None": 0}
+    assert "total_candidates" not in response.json()
+    assert job_with_none.id in {job["job_id"] for job in jobs}
 
 
 def test_get_job_not_found_returns_404(client):
@@ -92,9 +97,10 @@ def test_get_job_not_found_returns_404(client):
     assert response.status_code == 404
 
 
-def test_get_job_returns_full_detail_including_description(client, db_session):
+def test_get_job_returns_full_detail_including_description(client, db_session, user):
     job = _make_job(
         db_session,
+        user,
         title="Backend Engineer",
         description="We need a backend engineer.",
         required_education="Bachelor's degree",
@@ -116,10 +122,40 @@ def test_get_job_returns_full_detail_including_description(client, db_session):
     assert body["ready_to_match"] is True
     assert body["required_skills_count"] == 1
     assert body["skills"] == [{"name": "Python", "is_required": True}]
+    assert body["required_skills"] == ["Python"]
+    assert body["preferred_skills"] == []
+    assert body["applications_count"] == 0
+    assert body["created_by"] == "Test Admin"
 
 
-def test_get_job_without_requirements_is_not_ready_to_match(client, db_session):
-    job = _make_job(db_session, title="Barista")
+def test_get_job_splits_required_and_preferred_skills(client, db_session, user):
+    job = _make_job(db_session, user, title="Backend Engineer")
+    python = Skill(name="Python")
+    docker = Skill(name="Docker")
+    db_session.add_all([python, docker])
+    db_session.commit()
+    db_session.add(JobSkill(job_id=job.id, skill_id=python.id, is_required=True))
+    db_session.add(JobSkill(job_id=job.id, skill_id=docker.id, is_required=False))
+    db_session.commit()
+
+    body = client.get(f"/api/jobs/{job.id}").json()
+    assert body["required_skills"] == ["Python"]
+    assert body["preferred_skills"] == ["Docker"]
+    assert body["required_skills_count"] == 1
+
+
+def test_get_job_counts_its_applications(client, db_session, user):
+    job = _make_job(db_session, user, title="Backend Engineer")
+    _, cv = make_candidate_with_cv(db_session, user)
+    db_session.commit()
+    create_or_update_applications(db_session, job.id, [cv.id], user)
+
+    body = client.get(f"/api/jobs/{job.id}").json()
+    assert body["applications_count"] == 1
+
+
+def test_get_job_without_requirements_is_not_ready_to_match(client, db_session, user):
+    job = _make_job(db_session, user, title="Barista")
     response = client.get(f"/api/jobs/{job.id}")
     assert response.status_code == 200
     assert response.json()["ready_to_match"] is False
@@ -138,7 +174,7 @@ def _valid_create_payload(**overrides):
     return payload
 
 
-def test_create_job_with_valid_fields_returns_201(client, db_session):
+def test_create_job_with_valid_fields_returns_201(client, db_session, user):
     response = client.post("/api/jobs", json=_valid_create_payload())
     assert response.status_code == 201
     body = response.json()
@@ -154,6 +190,57 @@ def test_create_job_with_valid_fields_returns_201(client, db_session):
     job = db_session.query(Job).filter(Job.id == body["job_id"]).first()
     assert job is not None
     assert job.description is None
+    assert job.created_by_user_id == user.id
+    assert body["created_by"] == "Test Admin"
+
+
+def test_create_job_accepts_skills_with_required_flag(client):
+    response = client.post(
+        "/api/jobs",
+        json=_valid_create_payload(
+            required_skills=[],
+            skills=[
+                {"name": "Python", "is_required": True},
+                {"name": "Docker", "is_required": False},
+                "SQL",
+            ],
+        ),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["required_skills"] == ["Python", "SQL"]
+    assert body["preferred_skills"] == ["Docker"]
+    assert body["required_skills_count"] == 2
+
+
+def test_create_job_required_wins_when_a_skill_is_listed_both_ways(client):
+    response = client.post(
+        "/api/jobs",
+        json=_valid_create_payload(
+            required_skills=[],
+            skills=[{"name": "python", "is_required": False}, {"name": "Python", "is_required": True}],
+        ),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["required_skills"] == ["python"]
+    assert body["preferred_skills"] == []
+
+
+def test_create_job_with_only_preferred_skills_is_not_ready_to_match(client):
+    response = client.post(
+        "/api/jobs",
+        json=_valid_create_payload(
+            required_skills=[],
+            required_experience_years=0,
+            required_education=None,
+            skills=[{"name": "Docker", "is_required": False}],
+        ),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["ready_to_match"] is False
+    assert body["preferred_skills"] == ["Docker"]
 
 
 def test_create_job_appears_in_list(client):
@@ -187,9 +274,9 @@ def test_create_job_accepts_zero_experience(client):
     assert response.status_code == 201
 
 
-def test_create_job_empty_skills_list_returns_422(client):
+def test_create_job_empty_skills_list_returns_400(client):
     response = client.post("/api/jobs", json=_valid_create_payload(required_skills=[]))
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_create_job_blank_skills_only_returns_400(client):
@@ -210,7 +297,7 @@ def test_create_job_deduplicates_skills_case_insensitively(client):
     assert {s["name"] for s in body["skills"]} == {"Python", "SQL"}
 
 
-def test_create_job_reuses_existing_skill_record(client, db_session):
+def test_create_job_reuses_existing_skill_record(client, db_session, user):
     existing = Skill(name="Python")
     db_session.add(existing)
     db_session.commit()
@@ -231,7 +318,7 @@ def test_create_job_does_not_call_nlp_extractor(client, monkeypatch):
     assert response.status_code == 201
 
 
-def test_create_job_rolls_back_on_persistence_failure(client, db_session, monkeypatch):
+def test_create_job_rolls_back_on_persistence_failure(client, db_session, user, monkeypatch):
     from services import job_persistence
 
     def _raise(*args, **kwargs):
@@ -244,7 +331,7 @@ def test_create_job_rolls_back_on_persistence_failure(client, db_session, monkey
     assert db_session.query(Job).filter(Job.title == "Should Not Persist").count() == 0
 
 
-def test_create_job_persists_responsibilities_and_qualifications(client, db_session):
+def test_create_job_persists_responsibilities_and_qualifications(client, db_session, user):
     response = client.post(
         "/api/jobs",
         json=_valid_create_payload(
@@ -322,7 +409,7 @@ def _fake_job_info(**overrides):
     return JobInfo(**base)
 
 
-def test_analyze_preview_does_not_create_a_job(client, db_session, monkeypatch):
+def test_analyze_preview_does_not_create_a_job(client, db_session, user, monkeypatch):
     monkeypatch.setattr(
         "routers.job.extract_job_info", lambda description: _fake_job_info()
     )
@@ -382,7 +469,7 @@ def test_analyze_preview_extraction_failure_returns_502(client, monkeypatch):
     assert response.status_code == 502
 
 
-def test_save_after_preview_creates_exactly_one_job(client, db_session, monkeypatch):
+def test_save_after_preview_creates_exactly_one_job(client, db_session, user, monkeypatch):
     monkeypatch.setattr(
         "routers.job.extract_job_info", lambda description: _fake_job_info()
     )

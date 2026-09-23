@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, Float, Integer, String, UnicodeText
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, UnicodeText
 from sqlalchemy.sql import func
 
 from database import Base
@@ -82,6 +82,14 @@ class Job(Base):
     posting_date = Column(
         Date,
         nullable=True
+    )
+
+    # Recorded on both creation paths; never used to restrict access
+    # (ADR 0002).
+    created_by_user_id = Column(
+        Integer,
+        ForeignKey("Users.id"),
+        nullable=False
     )
 
     created_at = Column(

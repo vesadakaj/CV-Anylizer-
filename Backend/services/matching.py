@@ -1,12 +1,18 @@
-"""Deterministic candidate-job matching.
+"""Deterministic Application scoring.
 
 This module is the matching layer. It is intentionally separate from the
 NLP/LLM extraction layer (`services/candidate_extraction.py` and
 `services/job_extraction.py`): it never calls an LLM, never reads raw CV or
 job-description text, and never uses embeddings. It only reads already
--persisted, structured rows (Candidate, Job, CandidateSkill, JobSkill, Skill,
+-persisted, structured rows (CV, Candidate, Job, CvSkill, JobSkill, Skill,
 WorkExperience, Education) and combines them with a fixed, explainable
 formula.
+
+Every score belongs to an Application and is computed from the one CV that
+Application points at (ADR 0001), so a later CV for the same person never
+moves an earlier Job's ranking. The result is stored 1:1 with the
+Application together with `ALGORITHM_VERSION`; a ranking read recomputes
+and re-stores any row that is missing or carries an older version.
 
 Storage convention: `MatchResult` stores every score column (overall_score,
 skill_score, experience_score, education_score, language_score) as a
@@ -20,16 +26,18 @@ from __future__ import annotations
 import logging
 import math
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import date
-from typing import Optional
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
+from typing import Iterable, Optional
 
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from models.application import Application
 from models.candidate import Candidate
-from models.candidate_skill import CandidateSkill
+from models.cv import CV
+from models.cv_skill import CvSkill
 from models.education import Education
 from models.job import Job
 from models.job_skill import JobSkill
@@ -38,6 +46,11 @@ from models.skill import Skill
 from models.work_experience import WorkExperience
 
 logger = logging.getLogger(__name__)
+
+# Bump whenever the scoring formula or its inputs change. Stored Match
+# Results carrying an older version are recomputed the next time they are
+# read, so a formula change never requires a data migration.
+ALGORITHM_VERSION = 1
 
 
 # --- Base weights (sum to 100). Language is informational only and never
@@ -71,11 +84,15 @@ EDUCATION_LEVEL_NAMES = {0: "High School", 1: "Bachelor", 2: "Master", 3: "PhD"}
 AVG_DAYS_PER_YEAR = 365.25
 
 
-class CandidateNotFoundError(Exception):
+class CvNotFoundError(Exception):
     pass
 
 
 class JobNotFoundError(Exception):
+    pass
+
+
+class ApplicationNotFoundError(Exception):
     pass
 
 
@@ -117,7 +134,11 @@ class EducationScoreResult:
 
 
 @dataclass
-class CandidateMatchInput:
+class CvMatchInput:
+    """The Profile of one CV, plus the identity of the Candidate it belongs
+    to. This is the only candidate-side input the scorer ever sees."""
+
+    cv_id: int
     candidate_id: int
     full_name: str
     skill_ids: set[int]
@@ -134,10 +155,14 @@ class JobMatchInput:
     required_experience_years: Optional[float]
     required_education_level: Optional[int]
     required_education_raw: Optional[str]
+    # Preferred skills are shown in the explanation and never scored.
+    preferred_skill_ids: set[int]
+    preferred_skill_names: dict[int, str]
 
 
 @dataclass
 class MatchOutcome:
+    cv_id: int
     candidate_id: int
     job_id: int
     candidate_name: str
@@ -149,6 +174,8 @@ class MatchOutcome:
     available_criteria: list[str]
     effective_weights: dict[str, float]
     explanation: str
+    preferred_skills_matched: list[str]
+    total_preferred_skills: int
 
 
 # --------------------------------------------------------------------------
@@ -157,11 +184,16 @@ class MatchOutcome:
 
 
 class MatchResponse(BaseModel):
+    """The full breakdown and explanation of one Application's score."""
+
+    application_id: int
     candidate_id: int
+    cv_id: int
     job_id: int
     candidate_name: str
     job_title: str
     status: str  # "scored" | "unscorable"
+    algorithm_version: int = ALGORITHM_VERSION
     overall_score: Optional[float]
     skill_score: Optional[float]
     experience_score: Optional[float]
@@ -176,24 +208,35 @@ class MatchResponse(BaseModel):
     candidate_education_level: Optional[str]
     required_education_level: Optional[str]
     candidate_field_of_study: Optional[str] = None
+    preferred_skills_matched: list[str] = []
+    total_preferred_skills: int = 0
     available_criteria: list[str]
     effective_weights: dict[str, float]
     explanation: str
 
 
-class RankedMatchResponse(MatchResponse):
+class RankedApplicationResponse(BaseModel):
+    """One row of a Job's ranking. Deliberately summary-only: the breakdown
+    is served per Application by `GET /api/applications/{id}/match`."""
+
     rank: int
+    application_id: int
+    candidate_id: int
+    cv_id: int
+    candidate_name: str
+    status: str  # "scored" | "unscorable"
+    overall_score: Optional[float]
 
 
 class JobRankingResponse(BaseModel):
     job_id: int
     job_title: str
-    total_candidates: int
-    returned_candidates: int
+    total_applications: int
+    returned_applications: int
     limit: int
     offset: int
     minimum_score: Optional[float] = None
-    candidates: list[RankedMatchResponse]
+    applications: list[RankedApplicationResponse]
 
 
 # --------------------------------------------------------------------------
@@ -405,6 +448,8 @@ def _build_explanation(
     available_criteria: list[str],
     effective_weights: dict[str, float],
     overall_score: Optional[float],
+    preferred_skills_matched: Optional[list[str]] = None,
+    total_preferred_skills: int = 0,
 ) -> str:
     if not available_criteria:
         return (
@@ -446,18 +491,35 @@ def _build_explanation(
     else:
         parts.append(f"Education excluded: {education.reason}")
 
+    if total_preferred_skills > 0:
+        matched = preferred_skills_matched or []
+        parts.append(
+            f"Also has {len(matched)} of {total_preferred_skills} preferred "
+            f"skills ({', '.join(matched) or 'none'}); preferred skills never "
+            "count toward the score."
+        )
+
     parts.append(f"Overall match: {overall_score:.2f}%.")
 
     return " ".join(parts)
 
 
-def _score_candidate_against_job(
-    candidate: CandidateMatchInput, job: JobMatchInput, today: date
+def _score_cv_against_job(
+    cv: CvMatchInput, job: JobMatchInput, today: date
 ) -> MatchOutcome:
-    """The single deterministic scoring algorithm, reused by both individual
-    matching and job-wide ranking."""
+    """The single deterministic scoring algorithm, reused by Application
+    creation, the per-Application breakdown and the Job ranking."""
+    candidate = cv
     skill_result = compute_skill_score(
         candidate.skill_ids, job.required_skill_ids, job.required_skill_names
+    )
+
+    preferred_matched = sorted(
+        {
+            job.preferred_skill_names[i]
+            for i in (candidate.skill_ids & job.preferred_skill_ids)
+        },
+        key=str.lower,
     )
 
     candidate_years = compute_total_experience_years(
@@ -494,9 +556,12 @@ def _score_candidate_against_job(
         available_criteria,
         effective_weights,
         overall,
+        preferred_skills_matched=preferred_matched,
+        total_preferred_skills=len(job.preferred_skill_ids),
     )
 
     return MatchOutcome(
+        cv_id=cv.cv_id,
         candidate_id=candidate.candidate_id,
         job_id=job.job_id,
         candidate_name=candidate.full_name,
@@ -508,6 +573,8 @@ def _score_candidate_against_job(
         available_criteria=available_criteria,
         effective_weights=effective_weights,
         explanation=explanation,
+        preferred_skills_matched=preferred_matched,
+        total_preferred_skills=len(job.preferred_skill_ids),
     )
 
 
@@ -516,41 +583,70 @@ def _score_candidate_against_job(
 # --------------------------------------------------------------------------
 
 
-def _load_candidate_input(db: Session, candidate_id: int) -> CandidateMatchInput:
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if candidate is None:
-        raise CandidateNotFoundError(f"Candidate {candidate_id} not found.")
+def _load_cv_inputs(db: Session, cv_ids: Iterable[int]) -> dict[int, CvMatchInput]:
+    """Batch-load the Profile of every given CV in a fixed number of queries
+    (one for the CVs and their Candidates, one per profile table), so a
+    ranking's query count does not grow with the number of Applications."""
+    ids = sorted(set(cv_ids))
+    if not ids:
+        return {}
 
-    skill_ids = {
-        row.skill_id
-        for row in db.query(CandidateSkill.skill_id)
-        .filter(CandidateSkill.candidate_id == candidate_id)
+    cv_rows = (
+        db.query(CV.id, CV.candidate_id, Candidate.full_name)
+        .join(Candidate, Candidate.id == CV.candidate_id)
+        .filter(CV.id.in_(ids))
         .all()
+    )
+
+    skills_by_cv: dict[int, set[int]] = defaultdict(set)
+    for row in (
+        db.query(CvSkill.cv_id, CvSkill.skill_id).filter(CvSkill.cv_id.in_(ids)).all()
+    ):
+        skills_by_cv[row.cv_id].add(row.skill_id)
+
+    work_by_cv: dict[int, list[tuple[Optional[date], Optional[date], bool]]] = (
+        defaultdict(list)
+    )
+    for row in (
+        db.query(
+            WorkExperience.cv_id,
+            WorkExperience.start_date,
+            WorkExperience.end_date,
+            WorkExperience.is_current,
+        )
+        .filter(WorkExperience.cv_id.in_(ids))
+        .all()
+    ):
+        work_by_cv[row.cv_id].append((row.start_date, row.end_date, bool(row.is_current)))
+
+    education_by_cv: dict[int, list[tuple[Optional[str], Optional[str]]]] = (
+        defaultdict(list)
+    )
+    for row in (
+        db.query(Education.cv_id, Education.degree, Education.field_of_study)
+        .filter(Education.cv_id.in_(ids))
+        .all()
+    ):
+        education_by_cv[row.cv_id].append((row.degree, row.field_of_study))
+
+    return {
+        row.id: CvMatchInput(
+            cv_id=row.id,
+            candidate_id=row.candidate_id,
+            full_name=row.full_name,
+            skill_ids=skills_by_cv.get(row.id, set()),
+            work_experience_rows=work_by_cv.get(row.id, []),
+            education_rows=education_by_cv.get(row.id, []),
+        )
+        for row in cv_rows
     }
 
-    work_experience_rows = [
-        (row.start_date, row.end_date, bool(row.is_current))
-        for row in db.query(
-            WorkExperience.start_date, WorkExperience.end_date, WorkExperience.is_current
-        )
-        .filter(WorkExperience.candidate_id == candidate_id)
-        .all()
-    ]
 
-    education_rows = [
-        (row.degree, row.field_of_study)
-        for row in db.query(Education.degree, Education.field_of_study)
-        .filter(Education.candidate_id == candidate_id)
-        .all()
-    ]
-
-    return CandidateMatchInput(
-        candidate_id=candidate.id,
-        full_name=candidate.full_name,
-        skill_ids=skill_ids,
-        work_experience_rows=work_experience_rows,
-        education_rows=education_rows,
-    )
+def _load_cv_input(db: Session, cv_id: int) -> CvMatchInput:
+    inputs = _load_cv_inputs(db, [cv_id])
+    if cv_id not in inputs:
+        raise CvNotFoundError(f"CV {cv_id} not found.")
+    return inputs[cv_id]
 
 
 def _valid_required_experience_years(value: Optional[float]) -> Optional[float]:
@@ -568,87 +664,66 @@ def _load_job_input(db: Session, job_id: int) -> JobMatchInput:
     if job is None:
         raise JobNotFoundError(f"Job {job_id} not found.")
 
-    required_rows = (
-        db.query(JobSkill.skill_id, Skill.name)
+    skill_rows = (
+        db.query(JobSkill.skill_id, JobSkill.is_required, Skill.name)
         .join(Skill, Skill.id == JobSkill.skill_id)
-        .filter(JobSkill.job_id == job_id, JobSkill.is_required == True)  # noqa: E712
+        .filter(JobSkill.job_id == job_id)
         .all()
     )
-    required_skill_ids = {row.skill_id for row in required_rows}
-    required_skill_names = {row.skill_id: row.name for row in required_rows}
+    required_rows = [row for row in skill_rows if row.is_required]
+    preferred_rows = [row for row in skill_rows if not row.is_required]
 
     return JobMatchInput(
         job_id=job.id,
         title=job.title,
-        required_skill_ids=required_skill_ids,
-        required_skill_names=required_skill_names,
+        required_skill_ids={row.skill_id for row in required_rows},
+        required_skill_names={row.skill_id: row.name for row in required_rows},
         required_experience_years=_valid_required_experience_years(
             job.required_experience_years
         ),
         required_education_level=normalize_education_level(job.required_education),
         required_education_raw=job.required_education,
+        preferred_skill_ids={row.skill_id for row in preferred_rows},
+        preferred_skill_names={row.skill_id: row.name for row in preferred_rows},
     )
 
 
-def _load_all_candidates_input(db: Session) -> list[CandidateMatchInput]:
-    """Batch-load every candidate's structured data in a fixed number of
-    queries (no N+1), for job-wide ranking."""
-    candidates = db.query(Candidate).order_by(Candidate.id).all()
-    if not candidates:
-        return []
+@dataclass
+class _JobApplicationRow:
+    application_id: int
+    candidate_id: int
+    cv_id: int
+    candidate_name: str
 
-    candidate_ids = [c.id for c in candidates]
 
-    skills_by_candidate: dict[int, set[int]] = defaultdict(set)
-    for row in (
-        db.query(CandidateSkill.candidate_id, CandidateSkill.skill_id)
-        .filter(CandidateSkill.candidate_id.in_(candidate_ids))
-        .all()
-    ):
-        skills_by_candidate[row.candidate_id].add(row.skill_id)
-
-    work_by_candidate: dict[int, list[tuple[Optional[date], Optional[date], bool]]] = (
-        defaultdict(list)
-    )
-    for row in (
+def _load_job_applications(db: Session, job_id: int) -> list[_JobApplicationRow]:
+    """Only this Job's Applications, with the Candidate name, in one query."""
+    rows = (
         db.query(
-            WorkExperience.candidate_id,
-            WorkExperience.start_date,
-            WorkExperience.end_date,
-            WorkExperience.is_current,
+            Application.id,
+            Application.candidate_id,
+            Application.cv_id,
+            Candidate.full_name,
         )
-        .filter(WorkExperience.candidate_id.in_(candidate_ids))
+        .join(Candidate, Candidate.id == Application.candidate_id)
+        .filter(Application.job_id == job_id)
+        .order_by(Application.id)
         .all()
-    ):
-        work_by_candidate[row.candidate_id].append(
-            (row.start_date, row.end_date, bool(row.is_current))
-        )
-
-    education_by_candidate: dict[int, list[tuple[Optional[str], Optional[str]]]] = (
-        defaultdict(list)
     )
-    for row in (
-        db.query(Education.candidate_id, Education.degree, Education.field_of_study)
-        .filter(Education.candidate_id.in_(candidate_ids))
-        .all()
-    ):
-        education_by_candidate[row.candidate_id].append((row.degree, row.field_of_study))
-
     return [
-        CandidateMatchInput(
-            candidate_id=candidate.id,
-            full_name=candidate.full_name,
-            skill_ids=skills_by_candidate.get(candidate.id, set()),
-            work_experience_rows=work_by_candidate.get(candidate.id, []),
-            education_rows=education_by_candidate.get(candidate.id, []),
+        _JobApplicationRow(
+            application_id=row.id,
+            candidate_id=row.candidate_id,
+            cv_id=row.cv_id,
+            candidate_name=row.full_name,
         )
-        for candidate in candidates
+        for row in rows
     ]
 
 
 # --------------------------------------------------------------------------
-# Persistence (upsert on candidate_id + job_id - MatchResult has no unique
-# constraint, so the uniqueness is enforced here in application code)
+# Persistence: one MatchResult per Application. Uniqueness is a database
+# constraint (uq_MatchResults_application_id), not application code.
 # --------------------------------------------------------------------------
 
 
@@ -656,55 +731,93 @@ def _to_percent(ratio: Optional[float]) -> Optional[float]:
     return None if ratio is None else round(_clamp01(ratio) * 100, 2)
 
 
-def _persist_match_results_for_job(
-    db: Session, job_id: int, outcomes: list[MatchOutcome]
-) -> None:
-    """Upsert MatchResult rows for every scorable outcome in one transaction.
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
-    Outcomes with overall_score=None are skipped: MatchResult.overall_score is
-    NOT NULL in the schema, so persisting a fabricated 0% would be misleading.
-    Skipping is the safest schema-compatible behavior (documented limitation).
+
+def _store_outcome(
+    db: Session,
+    application_id: int,
+    outcome: MatchOutcome,
+    existing: Optional[MatchResult],
+) -> None:
+    """Write one outcome onto the session (flush, no commit).
+
+    An Unscorable outcome has no Match Result at all (CONTEXT.md,
+    "Unscorable"): `overall_score` is NOT NULL and a fabricated 0% would be
+    misleading, so a stale stored row for it is removed instead.
     """
-    scorable = [outcome for outcome in outcomes if outcome.overall_score is not None]
-    if not scorable:
+    if outcome.overall_score is None:
+        if existing is not None:
+            db.delete(existing)
         return
 
-    try:
-        existing_by_candidate = {
-            row.candidate_id: row
-            for row in db.query(MatchResult)
-            .filter(
-                MatchResult.job_id == job_id,
-                MatchResult.candidate_id.in_([o.candidate_id for o in scorable]),
-            )
-            .all()
-        }
+    values = dict(
+        overall_score=outcome.overall_score,
+        skill_score=_to_percent(outcome.skill.score),
+        experience_score=_to_percent(outcome.experience.score),
+        education_score=_to_percent(outcome.education.score),
+        language_score=None,
+        explanation=outcome.explanation,
+        algorithm_version=ALGORITHM_VERSION,
+        scored_at=_utcnow(),
+    )
+    if existing is not None:
+        for key, value in values.items():
+            setattr(existing, key, value)
+    else:
+        db.add(MatchResult(application_id=application_id, **values))
 
-        for outcome in scorable:
-            values = dict(
-                overall_score=outcome.overall_score,
-                skill_score=_to_percent(outcome.skill.score),
-                experience_score=_to_percent(outcome.experience.score),
-                education_score=_to_percent(outcome.education.score),
-                language_score=None,
-                explanation=outcome.explanation,
-            )
-            existing = existing_by_candidate.get(outcome.candidate_id)
-            if existing is not None:
-                for key, value in values.items():
-                    setattr(existing, key, value)
-            else:
-                db.add(
-                    MatchResult(
-                        candidate_id=outcome.candidate_id, job_id=job_id, **values
-                    )
-                )
 
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.exception("Failed to persist match result(s) for job=%s", job_id)
-        raise MatchPersistenceError("Could not save match result.") from exc
+def _is_stale(result: Optional[MatchResult]) -> bool:
+    return result is None or result.algorithm_version < ALGORITHM_VERSION
+
+
+def score_applications(
+    db: Session,
+    applications: list[Application],
+    *,
+    today: Optional[date] = None,
+) -> dict[int, MatchOutcome]:
+    """Score the given Applications (all of one Job) from the CV each one
+    points at and write the results onto the session.
+
+    Does NOT commit: the caller owns the transaction so that creating
+    Applications and storing their scores is one atomic step. Returns the
+    outcomes keyed by application id.
+    """
+    if not applications:
+        return {}
+
+    job_ids = {application.job_id for application in applications}
+    if len(job_ids) != 1:
+        raise ValueError("score_applications expects Applications of a single Job.")
+
+    effective_today = today or date.today()
+    job_input = _load_job_input(db, job_ids.pop())
+    cv_inputs = _load_cv_inputs(db, (application.cv_id for application in applications))
+
+    application_ids = [application.id for application in applications]
+    existing_by_application = {
+        row.application_id: row
+        for row in db.query(MatchResult)
+        .filter(MatchResult.application_id.in_(application_ids))
+        .all()
+    }
+
+    outcomes: dict[int, MatchOutcome] = {}
+    for application in applications:
+        cv_input = cv_inputs.get(application.cv_id)
+        if cv_input is None:
+            raise CvNotFoundError(f"CV {application.cv_id} not found.")
+        outcome = _score_cv_against_job(cv_input, job_input, effective_today)
+        _store_outcome(
+            db, application.id, outcome, existing_by_application.get(application.id)
+        )
+        outcomes[application.id] = outcome
+
+    db.flush()
+    return outcomes
 
 
 # --------------------------------------------------------------------------
@@ -712,13 +825,16 @@ def _persist_match_results_for_job(
 # --------------------------------------------------------------------------
 
 
-def outcome_to_response(outcome: MatchOutcome) -> MatchResponse:
+def outcome_to_response(outcome: MatchOutcome, application_id: int) -> MatchResponse:
     return MatchResponse(
+        application_id=application_id,
         candidate_id=outcome.candidate_id,
+        cv_id=outcome.cv_id,
         job_id=outcome.job_id,
         candidate_name=outcome.candidate_name,
         job_title=outcome.job_title,
         status="scored" if outcome.overall_score is not None else "unscorable",
+        algorithm_version=ALGORITHM_VERSION,
         overall_score=outcome.overall_score,
         skill_score=_to_percent(outcome.skill.score),
         experience_score=_to_percent(outcome.experience.score),
@@ -733,36 +849,55 @@ def outcome_to_response(outcome: MatchOutcome) -> MatchResponse:
         candidate_education_level=outcome.education.candidate_level_name,
         required_education_level=outcome.education.required_level_name,
         candidate_field_of_study=outcome.education.candidate_field_of_study,
+        preferred_skills_matched=outcome.preferred_skills_matched,
+        total_preferred_skills=outcome.total_preferred_skills,
         available_criteria=outcome.available_criteria,
         effective_weights=outcome.effective_weights,
         explanation=outcome.explanation,
     )
 
 
-def get_candidate_job_match(
+def get_application_match(
     db: Session,
-    candidate_id: int,
-    job_id: int,
+    application_id: int,
     *,
     today: Optional[date] = None,
-    persist: bool = True,
-) -> MatchOutcome:
-    """Score one candidate against one job. Raises CandidateNotFoundError /
-    JobNotFoundError if either does not exist."""
-    effective_today = today or date.today()
+) -> MatchResponse:
+    """The full breakdown of one Application's score.
 
-    candidate_input = _load_candidate_input(db, candidate_id)
-    job_input = _load_job_input(db, job_id)
+    The stored Match Result only keeps the score columns and the
+    explanation, so the breakdown (matched and missing skills, levels,
+    weights) is recomputed from the same CV and Job. The formula is
+    deterministic, so the result equals what was stored; when the stored
+    row is missing or was scored by an older algorithm, it is refreshed.
+    """
+    application = db.get(Application, application_id)
+    if application is None:
+        raise ApplicationNotFoundError(f"Application {application_id} not found.")
 
-    outcome = _score_candidate_against_job(candidate_input, job_input, effective_today)
+    existing = (
+        db.query(MatchResult)
+        .filter(MatchResult.application_id == application_id)
+        .one_or_none()
+    )
 
-    if persist:
-        _persist_match_results_for_job(db, job_id, [outcome])
+    cv_input = _load_cv_input(db, application.cv_id)
+    job_input = _load_job_input(db, application.job_id)
+    outcome = _score_cv_against_job(cv_input, job_input, today or date.today())
 
-    return outcome
+    if _is_stale(existing):
+        try:
+            _store_outcome(db, application.id, outcome, existing)
+            db.commit()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("Failed to persist match result for application=%s", application_id)
+            raise MatchPersistenceError("Could not save match result.") from exc
+
+    return outcome_to_response(outcome, application.id)
 
 
-def get_job_candidate_matches(
+def get_job_ranking(
     db: Session,
     job_id: int,
     *,
@@ -770,56 +905,97 @@ def get_job_candidate_matches(
     offset: int = 0,
     minimum_score: Optional[float] = None,
     today: Optional[date] = None,
-    persist: bool = True,
 ) -> JobRankingResponse:
-    """Score every candidate against one job, rank them, paginate, and persist.
+    """Rank one Job's Applications by their stored Match Results.
 
-    Reuses `_score_candidate_against_job` - the exact same function used by
-    `get_candidate_job_match` - for every candidate, so ranking can never
-    diverge from individual matching.
+    Reads the stored rows, recomputes and re-stores any that are missing or
+    carry an older `algorithm_version`, then sorts, filters and paginates.
+    The number of queries is bounded (job, job skills, applications, stored
+    results, then at most one per profile table for the recompute set)
+    regardless of how many Applications the Job has.
     """
-    effective_today = today or date.today()
-
     job_input = _load_job_input(db, job_id)
-    candidate_inputs = _load_all_candidates_input(db)
+    rows = _load_job_applications(db, job_id)
 
-    outcomes = [
-        _score_candidate_against_job(candidate_input, job_input, effective_today)
-        for candidate_input in candidate_inputs
-    ]
+    stored_by_application: dict[int, MatchResult] = {}
+    if rows:
+        stored_by_application = {
+            result.application_id: result
+            for result in db.query(MatchResult)
+            .filter(MatchResult.application_id.in_([row.application_id for row in rows]))
+            .all()
+        }
 
-    if persist:
-        _persist_match_results_for_job(db, job_id, outcomes)
+    # Missing rows are recomputed too: they are either Unscorable (still no
+    # row afterwards, cheap to confirm) or were never scored.
+    recompute = [row for row in rows if _is_stale(stored_by_application.get(row.application_id))]
+    scores: dict[int, Optional[float]] = {
+        row.application_id: stored_by_application[row.application_id].overall_score
+        for row in rows
+        if row.application_id in stored_by_application
+    }
 
-    def sort_key(outcome: MatchOutcome):
-        if outcome.overall_score is None:
-            return (1, 0.0, outcome.candidate_id)
-        return (0, -outcome.overall_score, outcome.candidate_id)
+    if recompute:
+        effective_today = today or date.today()
+        cv_inputs = _load_cv_inputs(db, (row.cv_id for row in recompute))
+        try:
+            for row in recompute:
+                cv_input = cv_inputs.get(row.cv_id)
+                if cv_input is None:
+                    raise CvNotFoundError(f"CV {row.cv_id} not found.")
+                outcome = _score_cv_against_job(cv_input, job_input, effective_today)
+                _store_outcome(
+                    db,
+                    row.application_id,
+                    outcome,
+                    stored_by_application.get(row.application_id),
+                )
+                scores[row.application_id] = outcome.overall_score
+            db.commit()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("Failed to persist match result(s) for job=%s", job_id)
+            raise MatchPersistenceError("Could not save match result.") from exc
 
-    ranked = sorted(outcomes, key=sort_key)
+    def sort_key(row: _JobApplicationRow):
+        score = scores.get(row.application_id)
+        if score is None:
+            return (1, 0.0, row.application_id)
+        return (0, -score, row.application_id)
+
+    ranked = sorted(rows, key=sort_key)
 
     if minimum_score is not None:
         ranked = [
-            outcome
-            for outcome in ranked
-            if outcome.overall_score is not None and outcome.overall_score >= minimum_score
+            row
+            for row in ranked
+            if scores.get(row.application_id) is not None
+            and scores[row.application_id] >= minimum_score
         ]
 
-    total_candidates = len(ranked)
+    total_applications = len(ranked)
     page = ranked[offset : offset + limit]
 
-    candidate_responses = [
-        RankedMatchResponse(rank=offset + index + 1, **outcome_to_response(outcome).model_dump())
-        for index, outcome in enumerate(page)
+    responses = [
+        RankedApplicationResponse(
+            rank=offset + index + 1,
+            application_id=row.application_id,
+            candidate_id=row.candidate_id,
+            cv_id=row.cv_id,
+            candidate_name=row.candidate_name,
+            status="scored" if scores.get(row.application_id) is not None else "unscorable",
+            overall_score=scores.get(row.application_id),
+        )
+        for index, row in enumerate(page)
     ]
 
     return JobRankingResponse(
         job_id=job_input.job_id,
         job_title=job_input.title,
-        total_candidates=total_candidates,
-        returned_candidates=len(candidate_responses),
+        total_applications=total_applications,
+        returned_applications=len(responses),
         limit=limit,
         offset=offset,
         minimum_score=minimum_score,
-        candidates=candidate_responses,
+        applications=responses,
     )
