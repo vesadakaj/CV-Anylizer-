@@ -11,6 +11,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage'
 import UsersPage from './pages/UsersPage'
 import CandidatesPage from './pages/CandidatesPage'
 import CandidateDetailPage from './pages/CandidateDetailPage'
+import ComparePage from './pages/ComparePage'
 import { loginPathFor } from './lib/authContext'
 import { useAuth } from './lib/authContext'
 import './App.css'
@@ -99,6 +100,7 @@ function App() {
         <Route path="/jobs/:jobId" element={<JobDetailPage />} />
         <Route path="/candidates" element={<CandidatesPage />} />
         <Route path="/candidates/:candidateId" element={<CandidateDetailPage />} />
+        <Route path="/compare" element={<ComparePage />} />
         <Route
           path="/users"
           element={

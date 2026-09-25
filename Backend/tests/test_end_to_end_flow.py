@@ -208,3 +208,33 @@ def test_full_flow(anon_client, db_session, stub_extraction):
     jobs = {row["title"]: row["applications_count"] for row in client.get("/api/jobs", headers=member).json()["jobs"]}
     assert jobs == {"Backend Developer": 2, "Data Engineer": 1}
     assert db_session.query(User).count() == 2
+
+    # 9. compare the two candidates for the first Job. The gap is the one
+    #    the ranking already showed, split across the Job's criteria.
+    comparison = client.get(
+        f"/api/comparisons?cv_a={second['cv_id']}&cv_b={third['cv_id']}&job_id={job_id}",
+        headers=member,
+    )
+    assert comparison.status_code == 200
+    body = comparison.json()
+    assert body["winner"] == "a"
+    assert (body["a"]["overall_score"], body["b"]["overall_score"]) == (100.0, 50.0)
+    assert body["score_delta"] == 50.0
+    assert [row["criterion"] for row in body["criteria"]] == ["skills"]
+    assert body["criteria"][0]["contribution_delta"] == 50.0
+    required = next(group for group in body["skill_groups"] if group["kind"] == "required")
+    assert (required["both"], required["only_a"]) == (["SQL"], ["Python"])
+
+    # Jane's own two CVs, with no Job: nothing is scored, the diff stands.
+    versions = client.get(
+        f"/api/comparisons?cv_a={second['cv_id']}&cv_b={first['cv_id']}", headers=member
+    ).json()
+    assert versions["mode"] == "profile"
+    assert versions["winner"] is None
+    assert versions["skill_groups"][0]["only_a"] == ["Docker", "SQL"]
+
+    # Comparing changed nothing: no new Application, no new Match Result,
+    # and the ranking reads exactly as it did before (ADR 0004).
+    assert db_session.query(Application).count() == 3
+    unchanged = client.get(f"/api/jobs/{job_id}/matches", headers=member).json()
+    assert unchanged["applications"] == matches_again["applications"]

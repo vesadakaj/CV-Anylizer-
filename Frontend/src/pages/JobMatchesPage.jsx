@@ -20,15 +20,25 @@ function SkeletonRow({ index }) {
 }
 
 // One Application of the Job. Summary only: rank, name, bar, score. The
-// breakdown is deliberately not rendered here.
-function ApplicationRow({ application, onAddToJob }) {
+// breakdown is deliberately not rendered here - it belongs to the
+// Application's own match, or to a head-to-head Comparison.
+function ApplicationRow({ application, onAddToJob, selected, selectionFull, onToggleSelect }) {
   const tier = scoreTierClass(application.overall_score)
   const displayScore = Math.round(application.overall_score ?? 0)
   const barWidth = clampPercent(application.overall_score)
   const rankClass = application.rank === 1 ? ' first' : application.rank <= 3 ? ' top' : ''
 
   return (
-    <li className="simple-match-item with-action">
+    <li className="simple-match-item with-action selectable">
+      <span className="simple-match-pick">
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={!selected && selectionFull}
+          aria-label={`Select ${application.candidate_name} to compare`}
+          onChange={() => onToggleSelect(application)}
+        />
+      </span>
       <span className={`simple-match-rank${rankClass}`}>{application.rank}</span>
       <span className="simple-match-avatar" aria-hidden="true">
         {initials(application.candidate_name)}
@@ -71,6 +81,10 @@ function JobMatchesPage() {
   const [pageErrorMessage, setPageErrorMessage] = useState('')
   const [dialogCandidate, setDialogCandidate] = useState(null) // { id, full_name }
   const [toast, setToast] = useState('')
+  // The two Applications picked for a head-to-head Comparison. The CV id is
+  // what the comparison reads, since that is the document each score came
+  // from (ADR 0001).
+  const [selected, setSelected] = useState([]) // [{ cv_id, candidate_name }]
 
   const loadPage = (requestedOffset, { initial = false } = {}) => {
     if (!isValidId) {
@@ -112,6 +126,21 @@ function JobMatchesPage() {
     loadPage(0, { initial: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])
+
+  const toggleSelect = (application) => {
+    setSelected((current) => {
+      if (current.some((entry) => entry.cv_id === application.cv_id)) {
+        return current.filter((entry) => entry.cv_id !== application.cv_id)
+      }
+      if (current.length === 2) return current
+      return [...current, { cv_id: application.cv_id, candidate_name: application.candidate_name }]
+    })
+  }
+
+  const compareReady = selected.length === 2
+  const comparePath = compareReady
+    ? `/compare?cv_a=${selected[0].cv_id}&cv_b=${selected[1].cv_id}&job=${jobId}`
+    : ''
 
   const scoredApplications = ranking ? ranking.applications.filter((a) => a.status === 'scored') : []
   const hasNoApplications = ranking != null && ranking.total_applications === 0
@@ -193,6 +222,32 @@ function JobMatchesPage() {
             </p>
           )}
 
+          {showList && scoredApplications.length > 1 && (
+            <div className="compare-bar">
+              <p className="compare-bar-hint" aria-live="polite">
+                {compareReady
+                  ? `${selected[0].candidate_name} vs ${selected[1].candidate_name}`
+                  : 'Tick two candidates to see why one scores higher than the other.'}
+              </p>
+              <div className="compare-bar-actions">
+                {selected.length > 0 && (
+                  <button type="button" className="table-action-button" onClick={() => setSelected([])}>
+                    Clear
+                  </button>
+                )}
+                {compareReady ? (
+                  <Link to={comparePath} className="use-selected-job-button compare-bar-button">
+                    Compare these two
+                  </Link>
+                ) : (
+                  <button type="button" className="use-selected-job-button compare-bar-button" disabled>
+                    Compare these two
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {hasNoApplications && (
             <div className="table-empty-state">
               <p className="empty-hint">No one has applied to this job yet.</p>
@@ -237,6 +292,9 @@ function JobMatchesPage() {
                       <ApplicationRow
                         key={application.application_id}
                         application={application}
+                        selected={selected.some((entry) => entry.cv_id === application.cv_id)}
+                        selectionFull={selected.length === 2}
+                        onToggleSelect={toggleSelect}
                         onAddToJob={(row) =>
                           setDialogCandidate({ id: row.candidate_id, full_name: row.candidate_name })
                         }

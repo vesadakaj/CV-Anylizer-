@@ -164,13 +164,13 @@ describe('App - sidebar and the Users page', () => {
     clearToken()
   })
 
-  it('members see Dashboard, Jobs and Candidates, with no disabled entries and no Users link', async () => {
+  it('members see Dashboard, Jobs, Candidates and Compare, with no disabled entries and no Users link', async () => {
     fetchCurrentUser.mockResolvedValue(user())
     renderApp('/')
     const nav = await screen.findByRole('navigation', { name: 'Main' })
 
     const links = within(nav).getAllByRole('link').map((link) => link.textContent)
-    expect(links).toEqual(['Dashboard', 'Jobs', 'Candidates'])
+    expect(links).toEqual(['Dashboard', 'Jobs', 'Candidates', 'Compare'])
     expect(nav.querySelectorAll('[aria-disabled="true"], [disabled]')).toHaveLength(0)
     expect(screen.queryByText('Resumes')).not.toBeInTheDocument()
     // The topbar shows the real name, not a placeholder.

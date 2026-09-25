@@ -199,6 +199,17 @@ export function KeyIcon(props) {
   )
 }
 
+export function CompareIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M10 3v14" />
+      <path d="M6.5 5.5h-4M6.5 5.5 4.5 11h4l-2-5.5Z" />
+      <path d="M17.5 5.5h-4M17.5 5.5 15.5 11h4l-2-5.5Z" />
+      <path d="M7.5 17h5" />
+    </svg>
+  )
+}
+
 export function CopyIcon(props) {
   return (
     <svg {...base} {...props}>

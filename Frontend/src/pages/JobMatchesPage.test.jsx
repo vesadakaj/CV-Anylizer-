@@ -56,9 +56,9 @@ function makeRanking(overrides = {}) {
     offset: 0,
     minimum_score: null,
     applications: [
-      makeApplication({ application_id: 501, candidate_id: 1, candidate_name: 'Jane Doe', overall_score: 67, rank: 1 }),
-      makeApplication({ application_id: 502, candidate_id: 2, candidate_name: 'Jane Whitmore', overall_score: 67, rank: 2 }),
-      makeApplication({ application_id: 503, candidate_id: 3, candidate_name: 'Melisa Bunjaku', overall_score: 40, rank: 3 }),
+      makeApplication({ application_id: 501, candidate_id: 1, cv_id: 71, candidate_name: 'Jane Doe', overall_score: 67, rank: 1 }),
+      makeApplication({ application_id: 502, candidate_id: 2, cv_id: 72, candidate_name: 'Jane Whitmore', overall_score: 67, rank: 2 }),
+      makeApplication({ application_id: 503, candidate_id: 3, cv_id: 73, candidate_name: 'Melisa Bunjaku', overall_score: 40, rank: 3 }),
     ],
     ...overrides,
   }
@@ -256,6 +256,38 @@ describe('JobMatchesPage', () => {
     renderAt(9)
     await waitFor(() => expect(screen.getByText('Could not load candidate matches.')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  describe('Compare two candidates', () => {
+    it('links to the comparison once exactly two are ticked', async () => {
+      fetchJobMatches.mockResolvedValue(makeRanking())
+      renderAt(9)
+      await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+      expect(screen.getByRole('button', { name: 'Compare these two' })).toBeDisabled()
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select Jane Doe to compare' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select Melisa Bunjaku to compare' }))
+
+      const link = screen.getByRole('link', { name: 'Compare these two' })
+      // The CV each score came from is what is compared, not the candidate.
+      expect(link).toHaveAttribute('href', '/compare?cv_a=71&cv_b=73&job=9')
+      expect(screen.getByText('Jane Doe vs Melisa Bunjaku')).toBeInTheDocument()
+    })
+
+    it('refuses a third pick and can be cleared', async () => {
+      fetchJobMatches.mockResolvedValue(makeRanking())
+      renderAt(9)
+      await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select Jane Doe to compare' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select Jane Whitmore to compare' }))
+      expect(screen.getByRole('checkbox', { name: 'Select Melisa Bunjaku to compare' })).toBeDisabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+      expect(screen.getByRole('checkbox', { name: 'Select Melisa Bunjaku to compare' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Compare these two' })).toBeDisabled()
+    })
   })
 
   describe('Add to another job', () => {

@@ -85,6 +85,7 @@ def test_every_route_except_health_and_login_requires_a_token(anon_client):
     assert ("GET", "/api/cvs/unattached") in checked
     assert ("GET", "/api/candidates") in checked
     assert ("GET", "/api/applications/{application_id}/match") in checked
+    assert ("GET", "/api/comparisons") in checked
     assert ("GET", "/api/users") in checked
 
 

@@ -825,6 +825,15 @@ def score_applications(
 # --------------------------------------------------------------------------
 
 
+# Other services that need the very same score (services/comparison.py) call
+# these instead of re-implementing the formula: a comparison can never
+# disagree with the ranking it explains.
+load_cv_match_input = _load_cv_input
+load_job_match_input = _load_job_input
+score_cv_against_job = _score_cv_against_job
+to_percent = _to_percent
+
+
 def outcome_to_response(outcome: MatchOutcome, application_id: int) -> MatchResponse:
     return MatchResponse(
         application_id=application_id,

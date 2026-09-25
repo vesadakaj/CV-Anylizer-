@@ -60,6 +60,14 @@ _Avoid_: Complete, valid job
 An Application whose Job has no available criterion, so no Match Result exists for it.
 _Avoid_: Zero score, failed match
 
+**Comparison**:
+Two CVs read head to head, optionally against one Job. It re-runs the same deterministic scorer and splits the gap between the two overall scores across the Job's criteria; it stores nothing and creates no Application (ADR 0004). Without a Job it names no winner and shows the factual Profile differences only.
+_Avoid_: Versus, duel, A/B test
+
+**Contribution**:
+How many points of a Comparison's overall gap one criterion is responsible for: the two sides' scores on it, times the weight the Job gives it. The contributions of every criterion add up to the gap.
+_Avoid_: Impact, importance, factor weight
+
 ### Access
 
 **User**:

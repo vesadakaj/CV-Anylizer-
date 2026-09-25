@@ -17,6 +17,8 @@ function CandidateDetailPage() {
   const [candidate, setCandidate] = useState(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [toast, setToast] = useState('')
+  // Two of this person's CVs, to see what a newer document actually changed.
+  const [selectedCvs, setSelectedCvs] = useState([])
 
   const load = () => {
     if (!isValidId) {
@@ -46,6 +48,21 @@ function CandidateDetailPage() {
   }, [candidateId])
 
   const isUnattached = candidate && candidate.applications.length === 0
+
+  const toggleCv = (cvId) => {
+    setSelectedCvs((current) => {
+      if (current.includes(cvId)) return current.filter((id) => id !== cvId)
+      if (current.length === 2) return current
+      return [...current, cvId]
+    })
+  }
+
+  const canCompareCvs = selectedCvs.length === 2
+  // No job in the link: two CVs of one person are compared as profiles, and
+  // the comparison page offers a job to score them against.
+  const compareCvsPath = canCompareCvs
+    ? `/compare?cv_a=${selectedCvs[0]}&cv_b=${selectedCvs[1]}`
+    : ''
 
   return (
     <main className="page-container">
@@ -148,29 +165,68 @@ function CandidateDetailPage() {
             {candidate.cvs.length === 0 ? (
               <p className="empty-hint">No CVs.</p>
             ) : (
-              <div className="table-scroll">
-                <table className="jobs-table detail-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">File</th>
-                      <th scope="col">Uploaded</th>
-                      <th scope="col">Uploaded by</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {candidate.cvs.map((cv, index) => (
-                      <tr key={cv.cv_id}>
-                        <td className="jobs-table-title">
-                          {cv.file_name}
-                          {index === 0 && <span className="users-you"> (newest)</span>}
-                        </td>
-                        <td>{formatDateTime(cv.uploaded_at)}</td>
-                        <td>{cv.uploaded_by || 'Unknown'}</td>
+              <>
+                {candidate.cvs.length > 1 && (
+                  <div className="compare-bar">
+                    <p className="compare-bar-hint" aria-live="polite">
+                      {canCompareCvs
+                        ? 'Two CVs selected.'
+                        : 'Tick two CVs to see what changed between them.'}
+                    </p>
+                    <div className="compare-bar-actions">
+                      {selectedCvs.length > 0 && (
+                        <button type="button" className="table-action-button" onClick={() => setSelectedCvs([])}>
+                          Clear
+                        </button>
+                      )}
+                      {canCompareCvs ? (
+                        <Link to={compareCvsPath} className="use-selected-job-button compare-bar-button">
+                          Compare these two CVs
+                        </Link>
+                      ) : (
+                        <button type="button" className="use-selected-job-button compare-bar-button" disabled>
+                          Compare these two CVs
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="table-scroll">
+                  <table className="jobs-table detail-table">
+                    <thead>
+                      <tr>
+                        {candidate.cvs.length > 1 && <th scope="col" className="compare-select-column">Compare</th>}
+                        <th scope="col">File</th>
+                        <th scope="col">Uploaded</th>
+                        <th scope="col">Uploaded by</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {candidate.cvs.map((cv, index) => (
+                        <tr key={cv.cv_id}>
+                          {candidate.cvs.length > 1 && (
+                            <td className="compare-select-column">
+                              <input
+                                type="checkbox"
+                                checked={selectedCvs.includes(cv.cv_id)}
+                                disabled={!selectedCvs.includes(cv.cv_id) && canCompareCvs}
+                                aria-label={`Select ${cv.file_name} to compare`}
+                                onChange={() => toggleCv(cv.cv_id)}
+                              />
+                            </td>
+                          )}
+                          <td className="jobs-table-title">
+                            {cv.file_name}
+                            {index === 0 && <span className="users-you"> (newest)</span>}
+                          </td>
+                          <td>{formatDateTime(cv.uploaded_at)}</td>
+                          <td>{cv.uploaded_by || 'Unknown'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </section>
 

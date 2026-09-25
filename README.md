@@ -2,14 +2,15 @@
 
 An HR tool for one organisation: upload CVs, score them against a Job, and read an explainable ranking. Every User sees the same Jobs, Candidates and Applications; Admins additionally manage Users.
 
-- Terminology (Job, Candidate, CV, Profile, Application, Unattached, Unlinkable, Match Result, …): [CONTEXT.md](CONTEXT.md)
-- Decisions and why: [docs/adr](docs/adr) — the Profile belongs to the CV (0001), one organisation with no tenancy (0002), Bearer JWT without refresh (0003)
+- Terminology (Job, Candidate, CV, Profile, Application, Unattached, Unlinkable, Match Result, Comparison, …): [CONTEXT.md](CONTEXT.md)
+- Decisions and why: [docs/adr](docs/adr) — the Profile belongs to the CV (0001), one organisation with no tenancy (0002), Bearer JWT without refresh (0003), a Comparison explains the score rather than producing one (0004)
 
 ## How it fits together
 
 - **Backend** (`Backend/`): FastAPI + SQLAlchemy + Alembic. MSSQL in production (Windows integrated auth); any SQLAlchemy URL works via `DATABASE_URL`. The LLM (Anthropic) is used only for extraction, never for scoring.
 - **Frontend** (`Frontend/`): React + Vite, talking to the API with a Bearer token.
 - **Flow**: upload CVs on the dashboard (they are Unattached until scored) → pick a Job → score the batch → read the breakdown. Jobs can also take uploads directly, and a Candidate can be added to another Job later.
+- **Comparing two CVs**: tick two rows in a Job's ranking (or two CVs on a Candidate's page, or use the Compare page) to see which is the better match and why — the gap between the two scores is split across the Job's criteria, so the reasons add up to the difference. It is a pure read: nothing is created or rescored (ADR 0004).
 
 ## Backend
 
@@ -100,13 +101,13 @@ Backend/
   main.py             app, CORS, router wiring, the open-routes allowlist
   database.py         lazy engine, DATABASE_URL / DB_* resolution
   models/             one file per table
-  routers/            auth, users, cv (upload), cvs (read), job, candidates, applications
-  services/           extraction (LLM), persistence, matching (deterministic), applications, auth
+  routers/            auth, users, cv (upload), cvs (read), job, candidates, applications, comparisons
+  services/           extraction (LLM), persistence, matching (deterministic), comparison, applications, auth
   alembic/versions/   migrations, apply with `alembic upgrade head`
   scripts/            create_admin.py
   tests/
 Frontend/
-  src/pages/          Dashboard, Jobs, Job detail, Matches, Candidates, Users, Login, Change password
+  src/pages/          Dashboard, Jobs, Job detail, Matches, Compare, Candidates, Users, Login, Change password
   src/components/     cards and dialogs shared by the pages
   src/lib/            apiFetch (Bearer + 401 handling), *Api.js per resource, upload queue hook
   src/test/setup.js   global test setup (mocks apiFetch once)

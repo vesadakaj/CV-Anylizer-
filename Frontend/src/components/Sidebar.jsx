@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { CandidatesIcon, DashboardIcon, JobsIcon, LogoutIcon, UsersIcon } from '../icons'
+import { CandidatesIcon, CompareIcon, DashboardIcon, JobsIcon, LogoutIcon, UsersIcon } from '../icons'
 import { useAuth } from '../lib/authContext'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: DashboardIcon, to: '/' },
   { label: 'Jobs', icon: JobsIcon, to: '/jobs' },
   { label: 'Candidates', icon: CandidatesIcon, to: '/candidates' },
+  { label: 'Compare', icon: CompareIcon, to: '/compare' },
   { label: 'Users', icon: UsersIcon, to: '/users', adminOnly: true },
 ]
 

@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers.applications import router as applications_router
 from routers.auth import router as auth_router
 from routers.candidates import router as candidates_router
+from routers.comparisons import router as comparisons_router
 from routers.cv import router as cv_router
 from routers.cvs import router as cvs_router
 from routers.dependencies import get_current_user
@@ -90,6 +91,13 @@ app.include_router(
     applications_router,
     prefix="/api/applications",
     tags=["applications"],
+    dependencies=[Depends(get_current_user)],
+)
+
+app.include_router(
+    comparisons_router,
+    prefix="/api/comparisons",
+    tags=["comparisons"],
     dependencies=[Depends(get_current_user)],
 )
 
