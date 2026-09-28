@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import CompareJobRail from '../components/CompareJobRail'
 import ComparePicker from '../components/ComparePicker'
 import ComparisonCriteria from '../components/ComparisonCriteria'
 import ComparisonProfile from '../components/ComparisonProfile'
@@ -28,6 +29,8 @@ function ComparePage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [comparison, setComparison] = useState(null)
   const [jobs, setJobs] = useState([])
+  const [jobsStatus, setJobsStatus] = useState('loading') // loading | success | error
+  const [jobsError, setJobsError] = useState('')
 
   const load = () => {
     if (!hasPair) return
@@ -50,15 +53,26 @@ function ComparePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cvA, cvB, jobId])
 
-  // Only needed for the "compare against another job" control, so a failure
-  // here leaves the comparison itself intact.
-  useEffect(() => {
-    if (!hasPair) return
+  // The job rail is shown in both states. A failure here is reported in the
+  // rail and leaves the comparison itself intact.
+  const loadJobs = () => {
+    setJobsStatus('loading')
+    setJobsError('')
     fetchJobs()
-      .then((data) => setJobs(data.jobs))
-      .catch(() => setJobs([]))
+      .then((data) => {
+        setJobs(data.jobs)
+        setJobsStatus('success')
+      })
+      .catch((err) => {
+        setJobsError(err.message)
+        setJobsStatus('error')
+      })
+  }
+
+  useEffect(() => {
+    loadJobs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPair])
+  }, [])
 
   const setPair = ({ cvA: nextA, cvB: nextB, jobId: nextJob }) => {
     const next = { cv_a: String(nextA), cv_b: String(nextB) }
@@ -68,48 +82,61 @@ function ComparePage() {
 
   const swap = () => setPair({ cvA: cvB, cvB: cvA, jobId })
 
-  const changeJob = (value) => {
+  const changeJob = (id) => {
     const next = { cv_a: String(cvA), cv_b: String(cvB) }
-    if (value) next.job = value
+    if (id) next.job = String(id)
     setSearchParams(next)
   }
 
+  // Before a pair exists the job only says whose Applications to pick
+  // from, so choosing one replaces the history entry instead of adding one.
+  const pickJob = (id) => setSearchParams({ job: String(id) }, { replace: true })
+
   const clearPair = () => setSearchParams(jobId ? { job: String(jobId) } : {})
+
+  const rail = (
+    <CompareJobRail
+      jobs={jobs}
+      status={jobsStatus}
+      error={jobsError}
+      onRetry={loadJobs}
+      selectedJobId={jobId}
+      onSelect={hasPair ? changeJob : pickJob}
+      mode={hasPair ? 'score' : 'pick'}
+    />
+  )
 
   if (!hasPair) {
     return (
-      <main className="page-container matches-page-container">
-        <Link to="/jobs" className="link-button back-link">
-          ← Back to jobs
-        </Link>
-        <ComparePicker initialJobId={jobId ?? ''} onCompare={setPair} />
+      <main className="page-container compare-layout">
+        <div className="compare-rail-column">
+          <Link to="/jobs" className="link-button back-link">
+            ← Back to jobs
+          </Link>
+          {rail}
+        </div>
+        <div className="compare-main-column">
+          <ComparePicker
+            key={jobId ?? 'none'}
+            jobId={jobId}
+            job={jobs.find((job) => job.job_id === jobId)}
+            onCompare={setPair}
+          />
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="page-container matches-page-container compare-page">
-      <Link to={jobId ? `/jobs/${jobId}/matches` : '/candidates'} className="link-button back-link">
-        ← {jobId ? 'Back to the ranking' : 'Back to candidates'}
-      </Link>
+    <main className="page-container compare-layout compare-page">
+      <div className="compare-rail-column">
+        <Link to={jobId ? `/jobs/${jobId}/matches` : '/candidates'} className="link-button back-link">
+          ← {jobId ? 'Back to the ranking' : 'Back to candidates'}
+        </Link>
+        {rail}
+      </div>
 
-      <div className="compare-toolbar">
-        <div className="form-field compare-toolbar-job">
-          <label htmlFor="compare-job-select">Compare against</label>
-          <select
-            id="compare-job-select"
-            value={jobId ?? ''}
-            onChange={(event) => changeJob(event.target.value)}
-          >
-            <option value="">No job — profiles only</option>
-            {jobs.map((job) => (
-              <option key={job.job_id} value={job.job_id}>
-                {job.title}
-                {job.ready_to_match ? '' : ' (not ready to match)'}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="compare-main-column">
         <div className="compare-toolbar-actions">
           <button type="button" className="table-action-button" onClick={swap}>
             Swap sides
@@ -118,35 +145,35 @@ function ComparePage() {
             Pick other CVs
           </button>
         </div>
+
+        {status === 'loading' && (
+          <div className="card">
+            <p className="empty-hint" aria-live="polite">
+              Comparing…
+            </p>
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="card">
+            <p className="upload-message error" role="alert">
+              {errorMessage}
+            </p>
+            <button type="button" className="use-selected-job-button" onClick={load}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {status === 'success' && comparison && (
+          <>
+            <ComparisonVerdict comparison={comparison} />
+            <ComparisonCriteria comparison={comparison} />
+            <ComparisonSkills comparison={comparison} />
+            <ComparisonProfile comparison={comparison} />
+          </>
+        )}
       </div>
-
-      {status === 'loading' && (
-        <div className="card">
-          <p className="empty-hint" aria-live="polite">
-            Comparing…
-          </p>
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div className="card">
-          <p className="upload-message error" role="alert">
-            {errorMessage}
-          </p>
-          <button type="button" className="use-selected-job-button" onClick={load}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {status === 'success' && comparison && (
-        <>
-          <ComparisonVerdict comparison={comparison} />
-          <ComparisonCriteria comparison={comparison} />
-          <ComparisonSkills comparison={comparison} />
-          <ComparisonProfile comparison={comparison} />
-        </>
-      )}
     </main>
   )
 }

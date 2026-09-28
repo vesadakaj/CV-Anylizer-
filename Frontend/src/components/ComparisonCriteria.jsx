@@ -68,7 +68,7 @@ function ComparisonCriteria({ comparison }) {
       <section className="card compare-criteria-card">
         <h2 className="card-title">Why one is better</h2>
         <p className="empty-hint">
-          Pick a job above. A score only means something against requirements, so without one there
+          Pick a job in the list. A score only means something against requirements, so without one there
           is nothing to attribute — the factual differences are below.
         </p>
       </section>

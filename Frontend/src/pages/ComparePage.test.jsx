@@ -161,6 +161,7 @@ describe('ComparePage', () => {
       jobs: [
         { job_id: 9, title: 'Senior Data Engineer', company_name: 'Acme', ready_to_match: true, applications_count: 3 },
         { job_id: 12, title: 'Platform Engineer', company_name: 'Acme', ready_to_match: true, applications_count: 2 },
+        { job_id: 14, title: 'Lonely Role', company_name: null, ready_to_match: true, applications_count: 1 },
       ],
     })
   })
@@ -279,11 +280,32 @@ describe('ComparePage', () => {
     fetchComparison.mockResolvedValue(makeComparison())
     renderAt('?cv_a=71&cv_b=72&job=9')
     await screen.findByText('Why one is better')
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Compare against' })).toBeInTheDocument())
+    expect(await screen.findByRole('radio', { name: /Senior Data Engineer/ })).toBeChecked()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Compare against' }), { target: { value: '12' } })
+    fireEvent.click(screen.getByRole('radio', { name: /Platform Engineer/ }))
 
     await waitFor(() => expect(fetchComparison).toHaveBeenLastCalledWith({ cvA: 71, cvB: 72, jobId: 12 }))
+  })
+
+  it('offers every job for re-scoring, and no job at all', async () => {
+    fetchComparison.mockResolvedValue(makeComparison())
+    renderAt('?cv_a=71&cv_b=72&job=9')
+
+    // Neither CV has to have applied, so a job with one application is fine.
+    expect(await screen.findByRole('radio', { name: /Lonely Role/ })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('radio', { name: /No job — profiles only/ }))
+
+    await waitFor(() => expect(fetchComparison).toHaveBeenLastCalledWith({ cvA: 71, cvB: 72, jobId: null }))
+  })
+
+  it('keeps the comparison when the job list fails to load', async () => {
+    fetchJobs.mockRejectedValue(new Error('Jobs are down.'))
+    fetchComparison.mockResolvedValue(makeComparison())
+    renderAt('?cv_a=71&cv_b=72&job=9')
+
+    expect(await screen.findByText('Jobs are down.')).toBeInTheDocument()
+    expect(await screen.findByText('Why one is better')).toBeInTheDocument()
   })
 
   it('drops the job for a profile-only comparison and says nothing is scored', async () => {
@@ -376,17 +398,19 @@ describe('ComparePage', () => {
       expect(await screen.findByRole('heading', { name: 'Compare two CVs' })).toBeInTheDocument()
       expect(fetchComparison).not.toHaveBeenCalled()
 
-      fireEvent.change(await screen.findByRole('combobox', { name: 'Job' }), { target: { value: '9' } })
+      fireEvent.click(await screen.findByRole('radio', { name: /Senior Data Engineer/ }))
       await waitFor(() => expect(fetchJobMatches).toHaveBeenCalledWith(9, { limit: 100, offset: 0 }))
 
       expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Compare selected' })).toBeDisabled()
 
-      fireEvent.click(screen.getByRole('checkbox', { name: /Ada Lovelace/ }))
-      fireEvent.click(screen.getByRole('checkbox', { name: /Grace Hopper/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Ada Lovelace/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Grace Hopper/ }))
 
+      expect(screen.getByRole('button', { name: /Ada Lovelace/ })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByText('Ada Lovelace vs Grace Hopper')).toBeInTheDocument()
       // A third pick is refused rather than silently replacing one.
-      expect(screen.getByRole('checkbox', { name: /Alan Turing/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Alan Turing/ })).toBeDisabled()
 
       fireEvent.click(screen.getByRole('button', { name: 'Compare selected' }))
 
@@ -407,10 +431,27 @@ describe('ComparePage', () => {
       })
       renderAt('')
 
-      fireEvent.change(await screen.findByRole('combobox', { name: 'Job' }), { target: { value: '12' } })
+      fireEvent.click(await screen.findByRole('radio', { name: /Platform Engineer/ }))
       expect(
         await screen.findByText('This job has only one application — a comparison needs two.'),
       ).toBeInTheDocument()
+    })
+
+    it('does not offer a job with fewer than two applications', async () => {
+      renderAt('')
+
+      expect(await screen.findByRole('radio', { name: /Lonely Role/ })).toBeDisabled()
+      expect(screen.getByText('Only one application.')).toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: /No job/ })).not.toBeInTheDocument()
+    })
+
+    it('starts from the job in the URL', async () => {
+      fetchJobMatches.mockResolvedValue({ applications: [] })
+      renderAt('?job=9')
+
+      expect(await screen.findByRole('radio', { name: /Senior Data Engineer/ })).toBeChecked()
+      await waitFor(() => expect(fetchJobMatches).toHaveBeenCalledWith(9, { limit: 100, offset: 0 }))
+      expect(await screen.findByText(/No one has applied to this job yet/)).toBeInTheDocument()
     })
   })
 })

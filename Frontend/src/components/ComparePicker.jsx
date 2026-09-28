@@ -1,25 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchJobMatches, fetchJobs } from '../lib/jobsApi'
+import { fetchJobMatches } from '../lib/jobsApi'
 import { formatScore } from '../lib/comparisonFormat'
 import { initials, scoreTierClass } from '../lib/scoreTier'
 
-// Picking the pair. A job is asked for first because that is also the
-// context the comparison is scored in: whoever is being compared is almost
-// always being compared *for* something.
-function ComparePicker({ initialJobId = '', onCompare }) {
-  const [jobs, setJobs] = useState([])
-  const [jobsError, setJobsError] = useState('')
-  const [jobId, setJobId] = useState(initialJobId ? String(initialJobId) : '')
-  const [status, setStatus] = useState('idle') // idle | loading | success | error
+// Picking the pair from one Job's Applications. The Job is chosen in the
+// rail beside this panel, because it is also the context the comparison is
+// scored in: whoever is being compared is almost always compared *for*
+// something. The page keys this by job, so a new job starts a clean pick.
+function ComparePicker({ jobId, job, onCompare }) {
+  const [status, setStatus] = useState(jobId ? 'loading' : 'idle') // idle | loading | success | error
   const [errorMessage, setErrorMessage] = useState('')
   const [rows, setRows] = useState([])
-  const [selected, setSelected] = useState([]) // cv ids, at most two
+  const [selected, setSelected] = useState([]) // cv ids in pick order: side A, then side B
 
-  const loadApplications = (id) => {
+  const loadApplications = () => {
     setStatus('loading')
     setErrorMessage('')
-    fetchJobMatches(Number(id), { limit: 100, offset: 0 })
+    fetchJobMatches(jobId, { limit: 100, offset: 0 })
       .then((data) => {
         setRows(data.applications)
         setStatus('success')
@@ -31,26 +29,13 @@ function ComparePicker({ initialJobId = '', onCompare }) {
   }
 
   useEffect(() => {
-    fetchJobs()
-      .then((data) => setJobs(data.jobs))
-      .catch((err) => setJobsError(err.message))
-    if (initialJobId) loadApplications(initialJobId)
+    if (jobId) loadApplications()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The list of candidates belongs to the chosen job, so a new job empties
-  // both it and whatever was ticked in it.
-  const selectJob = (value) => {
-    setJobId(value)
-    setSelected([])
-    setRows([])
-    if (!value) {
-      setStatus('idle')
-      return
-    }
-    loadApplications(value)
-  }
+  const ready = selected.length === 2
 
+  // A third pick is refused rather than silently replacing one of the two.
   const toggle = (cvId) => {
     setSelected((current) => {
       if (current.includes(cvId)) return current.filter((id) => id !== cvId)
@@ -59,41 +44,31 @@ function ComparePicker({ initialJobId = '', onCompare }) {
     })
   }
 
-  const ready = selected.length === 2
+  if (!jobId) {
+    return (
+      <section className="card compare-picker-empty" aria-labelledby="compare-picker-heading">
+        <h1 id="compare-picker-heading" className="page-title">
+          Compare two CVs
+        </h1>
+        <p className="page-subtitle">
+          Pick a job from the list to see who applied, then choose two of them. You can also compare two
+          CVs of the same person from their <Link to="/candidates">candidate page</Link>.
+        </p>
+      </section>
+    )
+  }
+
+  const nameOf = (cvId) => rows.find((row) => row.cv_id === cvId)?.candidate_name
 
   return (
-    <section className="card compare-picker-card" aria-labelledby="compare-picker-heading">
+    <section className="card" aria-labelledby="compare-picker-heading">
       <h1 id="compare-picker-heading" className="page-title">
         Compare two CVs
       </h1>
       <p className="page-subtitle">
-        Pick a job, then two of its candidates. You can also compare two CVs of the same person from
-        their <Link to="/candidates">candidate page</Link>.
+        {job ? `${job.title}${job.company_name ? ` — ${job.company_name}` : ''}` : `Job ${jobId}`}. Pick two
+        of its candidates; the first is side A.
       </p>
-
-      {jobsError && (
-        <p className="upload-message error" role="alert">
-          {jobsError}
-        </p>
-      )}
-
-      <div className="form-field compare-picker-job">
-        <label htmlFor="compare-picker-job-select">Job</label>
-        <select
-          id="compare-picker-job-select"
-          value={jobId}
-          onChange={(event) => selectJob(event.target.value)}
-        >
-          <option value="">Select a job…</option>
-          {jobs.map((job) => (
-            <option key={job.job_id} value={job.job_id}>
-              {job.title}
-              {job.company_name ? ` — ${job.company_name}` : ''} ({job.applications_count}{' '}
-              application{job.applications_count === 1 ? '' : 's'})
-            </option>
-          ))}
-        </select>
-      </div>
 
       {status === 'loading' && (
         <p className="empty-hint" aria-live="polite">
@@ -102,9 +77,14 @@ function ComparePicker({ initialJobId = '', onCompare }) {
       )}
 
       {status === 'error' && (
-        <p className="upload-message error" role="alert">
-          {errorMessage}
-        </p>
+        <div>
+          <p className="upload-message error" role="alert">
+            {errorMessage}
+          </p>
+          <button type="button" className="link-button" onClick={loadApplications}>
+            Retry
+          </button>
+        </div>
       )}
 
       {status === 'success' && rows.length === 0 && (
@@ -120,42 +100,49 @@ function ComparePicker({ initialJobId = '', onCompare }) {
 
       {status === 'success' && rows.length > 1 && (
         <>
-          <p className="compare-picker-hint" aria-live="polite">
-            {ready
-              ? 'Two selected. Compare them below.'
-              : `Select ${2 - selected.length} more candidate${selected.length === 1 ? '' : 's'}.`}
-          </p>
-          <ul className="compare-picker-list">
+          <ul className="compare-candidate-grid">
             {rows.map((row) => {
-              const checked = selected.includes(row.cv_id)
+              const index = selected.indexOf(row.cv_id)
+              const side = index === 0 ? 'a' : index === 1 ? 'b' : null
               return (
-                <li key={row.application_id} className={`compare-picker-item${checked ? ' selected' : ''}`}>
-                  <label className="compare-picker-check">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={!checked && ready}
-                      onChange={() => toggle(row.cv_id)}
-                    />
+                <li key={row.application_id}>
+                  <button
+                    type="button"
+                    className={`compare-candidate-card${side ? ` picked side-${side}` : ''}`}
+                    aria-pressed={Boolean(side)}
+                    disabled={!side && ready}
+                    onClick={() => toggle(row.cv_id)}
+                  >
+                    <span className="compare-candidate-rank">#{row.rank}</span>
                     <span className="simple-match-avatar" aria-hidden="true">
                       {initials(row.candidate_name)}
                     </span>
-                    <span className="compare-picker-name">{row.candidate_name}</span>
-                  </label>
-                  <span className={`simple-match-score inline-score ${scoreTierClass(row.overall_score)}`}>
-                    {row.status === 'scored' ? formatScore(row.overall_score) : 'Unscorable'}
-                  </span>
+                    <span className="compare-candidate-name">{row.candidate_name}</span>
+                    <span className={`simple-match-score inline-score ${scoreTierClass(row.overall_score)}`}>
+                      {row.status === 'scored' ? formatScore(row.overall_score) : 'Unscorable'}
+                    </span>
+                    {side && (
+                      <span className={`compare-side-badge side-${side}`} aria-label={`side ${side.toUpperCase()}`}>
+                        {side.toUpperCase()}
+                      </span>
+                    )}
+                  </button>
                 </li>
               )
             })}
           </ul>
 
-          <div className="form-actions">
+          <div className="compare-bar">
+            <p className="compare-bar-hint" aria-live="polite">
+              {ready
+                ? `${nameOf(selected[0])} vs ${nameOf(selected[1])}`
+                : `Select ${2 - selected.length} more candidate${selected.length === 1 ? '' : 's'}.`}
+            </p>
             <button
               type="button"
-              className="use-selected-job-button"
+              className="use-selected-job-button compare-bar-button"
               disabled={!ready}
-              onClick={() => onCompare({ cvA: selected[0], cvB: selected[1], jobId: Number(jobId) })}
+              onClick={() => onCompare({ cvA: selected[0], cvB: selected[1], jobId })}
             >
               Compare selected
             </button>
